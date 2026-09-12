@@ -1468,14 +1468,14 @@ function toggleTheme() {
 let audioCtx = null;
 
 function playMindfulChime() {
-  if (!preferences.soundEnabled) return;
+  if (!preferences.soundEnabled) return false;
 
   try {
     const AudioCtx =
       typeof window !== "undefined"
         ? window.AudioContext || window.webkitAudioContext
         : null;
-    if (!AudioCtx) return;
+    if (!AudioCtx) return false;
 
     if (!audioCtx) {
       audioCtx = new AudioCtx();
@@ -1510,8 +1510,10 @@ function playMindfulChime() {
       osc.start(now);
       osc.stop(now + tone.duration + 0.1);
     });
+    return true;
   } catch (err) {
     console.warn("Audio chime notice:", err);
+    return false;
   }
 }
 
@@ -1530,8 +1532,8 @@ function updateSoundButtonUI() {
         : "Enable chime sound alerts",
     );
     soundBtn.title = preferences.soundEnabled
-      ? "Chime sound: Enabled (click to mute)"
-      : "Chime sound: Muted (click to enable)";
+      ? "Gentle end-of-session chimes enabled (click to mute)"
+      : "Enable gentle chimes when a session ends";
   }
 }
 
@@ -1540,8 +1542,14 @@ function toggleSound() {
   savePreferences();
   updateSoundButtonUI();
   if (preferences.soundEnabled) {
-    playMindfulChime();
-    showToast("🔔 Mindful chime enabled (testing tone).");
+    if (playMindfulChime()) {
+      showToast("🔔 Gentle chimes will play when sessions end.");
+    } else {
+      preferences.soundEnabled = false;
+      savePreferences();
+      updateSoundButtonUI();
+      showToast("Sound alerts are not supported in this browser.");
+    }
   } else {
     showToast("🔇 Mindful chime muted.");
   }
@@ -1593,6 +1601,7 @@ function requestNotificationPermission() {
     updateNotificationButtonUI();
     showToast("Notifications are blocked in your browser settings.");
   } else {
+    showToast("StudyCalm will request permission for session-end reminders.");
     const handleResult = (permission) => {
       if (permission === "granted") {
         preferences.notificationsEnabled = true;
