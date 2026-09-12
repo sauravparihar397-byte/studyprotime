@@ -378,6 +378,7 @@ if (
     initSessionCompletedControls();
     initHeaderControls();
     initOnboarding();
+    initDataTransferControls();
     render();
     console.log("🌿 StudyCalm SSOT state engine initialized successfully.");
   });
@@ -465,6 +466,157 @@ function saveState() {
     );
   } catch (error) {
     console.warn("Unable to save study state", error);
+  }
+}
+
+function createExportPayload() {
+  return {
+    app: "StudyCalm",
+    formatVersion: 1,
+    exportedAt: new Date().toISOString(),
+    state: {
+      version: 4,
+      selectedMode: state.selectedMode,
+      remainingSeconds: state.remainingSeconds,
+      isRunning: state.isRunning,
+      targetEndTime: state.targetEndTime,
+      activeSessionId: state.activeSessionId,
+      acknowledgedMilestones: state.acknowledgedMilestones,
+      sessionHistory: state.sessionHistory,
+      lastUpdatedAt: state.lastUpdatedAt,
+    },
+    preferences: {
+      theme: preferences.theme,
+      soundEnabled: preferences.soundEnabled,
+      notificationsEnabled: preferences.notificationsEnabled,
+      onboardingDismissed: preferences.onboardingDismissed,
+    },
+  };
+}
+
+function normalizeImportedState(payload) {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Backup must contain a JSON object.");
+  }
+
+  const importedState =
+    payload.state && typeof payload.state === "object"
+      ? payload.state
+      : payload;
+
+  if (!Array.isArray(importedState.sessionHistory)) {
+    throw new Error("Backup does not contain valid session history.");
+  }
+
+  const selectedMode = MODE_CONFIG[importedState.selectedMode]
+    ? importedState.selectedMode
+    : "focus";
+  const defaultState = createDefaultState();
+
+  return {
+    ...defaultState,
+    selectedMode,
+    remainingSeconds:
+      Number.isFinite(importedState.remainingSeconds) &&
+      importedState.remainingSeconds >= 0
+        ? importedState.remainingSeconds
+        : MODE_CONFIG[selectedMode].duration,
+    isRunning: false,
+    targetEndTime: null,
+    activeSessionId: null,
+    acknowledgedMilestones: {
+      firstStep: Boolean(importedState.acknowledgedMilestones?.firstStep),
+      dailyGoal: Boolean(importedState.acknowledgedMilestones?.dailyGoal),
+      streak3: Boolean(importedState.acknowledgedMilestones?.streak3),
+      streak7: Boolean(importedState.acknowledgedMilestones?.streak7),
+    },
+    sessionHistory: deduplicateHistory(importedState.sessionHistory).slice(
+      0,
+      30,
+    ),
+    lastUpdatedAt: Date.now(),
+  };
+}
+
+function normalizeImportedPreferences(importedPreferences) {
+  if (!importedPreferences || typeof importedPreferences !== "object") {
+    return createDefaultPreferences();
+  }
+
+  return {
+    theme: importedPreferences.theme === "dark" ? "dark" : "light",
+    soundEnabled: Boolean(importedPreferences.soundEnabled),
+    notificationsEnabled: Boolean(importedPreferences.notificationsEnabled),
+    onboardingDismissed: Boolean(importedPreferences.onboardingDismissed),
+  };
+}
+
+function exportStudyData() {
+  try {
+    const blob = new Blob([JSON.stringify(createExportPayload(), null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `studycalm-backup-${getLocalDateString()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast("Your private StudyCalm backup was exported.");
+  } catch (error) {
+    console.warn("Unable to export study data", error);
+    showToast("Study data could not be exported in this browser.");
+  }
+}
+
+async function importStudyData(file) {
+  if (!file) return;
+
+  try {
+    const payload = JSON.parse(await file.text());
+    const importedState = normalizeImportedState(payload);
+    const importedPreferences = normalizeImportedPreferences(
+      payload.preferences,
+    );
+
+    clearInterval(timerIntervalId);
+    timerIntervalId = null;
+    state = importedState;
+    preferences = importedPreferences;
+    saveState();
+    savePreferences();
+    applyTheme(preferences.theme);
+    updateSoundButtonUI();
+    updateNotificationButtonUI();
+    hideSessionCompletedPanel();
+    render();
+    showToast("StudyCalm backup restored successfully.");
+  } catch (error) {
+    console.warn("Unable to import study data", error);
+    showToast("That backup file is invalid or could not be read.");
+  }
+}
+
+function initDataTransferControls() {
+  const exportBtn = document.getElementById("exportDataBtn");
+  const importBtn = document.getElementById("importDataBtn");
+  const input = document.getElementById("importDataInput");
+
+  if (exportBtn && exportBtn.dataset.initialized !== "true") {
+    exportBtn.dataset.initialized = "true";
+    exportBtn.addEventListener("click", exportStudyData);
+  }
+
+  if (importBtn && input && importBtn.dataset.initialized !== "true") {
+    importBtn.dataset.initialized = "true";
+    importBtn.addEventListener("click", () => input.click());
+    input.addEventListener("change", () => {
+      const [file] = input.files || [];
+      importStudyData(file);
+      input.value = "";
+    });
   }
 }
 

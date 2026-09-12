@@ -1500,6 +1500,36 @@ ul {
   grid-column: 1 / -1;
 }
 
+.local-backup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+}
+
+.local-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .local-backup {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .local-backup-actions .btn {
+    flex: 1;
+  }
+}
+
 .timeline-summary-badge {
   font-size: 0.775rem;
   font-weight: 600;

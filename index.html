@@ -593,7 +593,7 @@
           </div>
         </section>
 
-        <!-- 3. Phone & Mac Upload / Sync Placeholders (Semantic & Non-misleading) -->
+        <!-- 3. Planned Device Sync (Non-interactive roadmap) -->
         <section
           id="sync"
           class="card sync-card"
@@ -602,52 +602,81 @@
           <div class="card-header">
             <div>
               <span class="card-eyebrow">Device Integration</span>
-              <h2 id="sync-heading" class="card-title">
-                Cross-Device Activity
-              </h2>
+              <h2 id="sync-heading" class="card-title">Future Device Sync</h2>
             </div>
             <span class="privacy-badge">🔒 Privacy-First Architecture</span>
           </div>
 
           <p class="card-description">
-            Seamlessly consolidate your study time from your laptop and mobile
-            device without intrusive tracking.
+            Cross-device syncing is planned for a future release. Your current
+            study data stays on this device and can be backed up below.
           </p>
 
           <!-- Semantically correct, non-interactive placeholder cards that stack cleanly -->
           <div class="sync-dropzones">
-            <!-- Mac Upload Placeholder Card -->
+            <!-- Planned Mac integration -->
             <div class="dropzone-box placeholder-box" aria-disabled="true">
               <div class="dropzone-icon" aria-hidden="true">💻</div>
               <div class="dropzone-info">
                 <div class="dropzone-title-row">
                   <h3 class="dropzone-title">Mac Study Log</h3>
-                  <span class="placeholder-status-tag"
-                    >Planned for Phase 3</span
-                  >
+                  <span class="placeholder-status-tag">Planned feature</span>
                 </div>
                 <p class="dropzone-hint">
-                  Future integration: import Screen Time or local study logs
-                  (.csv / .json).
+                  A future release may support importing compatible Mac study
+                  summaries. This card is not interactive yet.
                 </p>
               </div>
             </div>
 
-            <!-- Phone Upload Placeholder Card -->
+            <!-- Planned phone integration -->
             <div class="dropzone-box placeholder-box" aria-disabled="true">
               <div class="dropzone-icon" aria-hidden="true">📱</div>
               <div class="dropzone-info">
                 <div class="dropzone-title-row">
                   <h3 class="dropzone-title">Phone Focus Sync</h3>
-                  <span class="placeholder-status-tag"
-                    >Planned for Phase 3</span
-                  >
+                  <span class="placeholder-status-tag">Planned feature</span>
                 </div>
                 <p class="dropzone-hint">
-                  Future integration: sync Focus Mode session summaries or app
-                  lock check-ins.
+                  A future release may support phone study summaries. This card
+                  is not interactive yet.
                 </p>
               </div>
+            </div>
+          </div>
+
+          <div class="local-backup" aria-labelledby="local-backup-heading">
+            <div>
+              <h3 id="local-backup-heading" class="dropzone-title">
+                Local Study Backup
+              </h3>
+              <p class="dropzone-hint">
+                Export your study history to a private JSON file or restore a
+                backup from this device.
+              </p>
+            </div>
+            <div class="local-backup-actions">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="exportDataBtn"
+              >
+                Export Data
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="importDataBtn"
+              >
+                Import Data
+              </button>
+              <input
+                type="file"
+                id="importDataInput"
+                accept="application/json,.json"
+                hidden
+                aria-label="Choose a StudyCalm JSON backup file"
+              />
             </div>
           </div>
 
