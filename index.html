@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="StudyCalm — A gentle, achievement-focused study dashboard and Pomodoro companion."
+    />
+    <title>StudyCalm 🌿 | Mindful Pomodoro & Study Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- App Header & Navigation -->
+    <header class="site-header" role="banner">
+      <div class="header-container">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">🌱</span>
+          <div class="brand-text">
+            <h1 class="brand-title">StudyCalm</h1>
+            <p class="brand-subtitle">Mindful Focus &amp; Rhythm</p>
+          </div>
+        </div>
+
+        <nav class="main-nav" aria-label="Primary Navigation">
+          <ul class="nav-list">
+            <li>
+              <a href="#dashboard" class="nav-link active" data-tab="dashboard"
+                >Dashboard</a
+              >
+            </li>
+            <li>
+              <a href="#timer" class="nav-link" data-tab="timer">Timer</a>
+            </li>
+            <li>
+              <a href="#goal" class="nav-link" data-tab="goal">Daily Goal</a>
+            </li>
+            <li>
+              <a href="#sync" class="nav-link" data-tab="sync">Devices</a>
+            </li>
+            <li>
+              <a href="#history" class="nav-link" data-tab="history">History</a>
+            </li>
+          </ul>
+        </nav>
+
+        <div class="user-status" aria-label="Current mindset">
+          <span class="status-indicator" aria-hidden="true"></span>
+          <span class="status-text">Ready for focus</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <main id="main-content" class="main-layout" role="main">
+      <!-- Welcome & Encouragement Banner -->
+      <section class="welcome-banner" aria-labelledby="welcome-heading">
+        <div class="welcome-content">
+          <h2 id="welcome-heading" class="welcome-title">
+            Welcome to your calm space, Saurav ✨
+          </h2>
+          <p class="welcome-message">
+            Every moment of presence counts. Let’s make steady, gentle progress
+            toward your intentions today.
+          </p>
+        </div>
+        <div class="daily-badge" aria-label="Daily focus streak status">
+          <span class="badge-icon" aria-hidden="true">🌱</span>
+          <div class="badge-copy">
+            <div class="badge-title-row">
+              <strong>Showing Up Matters</strong>
+              <span class="streak-pill" id="streakPill">Daily Streak</span>
+            </div>
+            <span id="streakDisplay">0 days of calm dedication</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4-Stat Summary Overview Strip -->
+      <section
+        class="summary-metrics-strip"
+        aria-label="Daily focus statistics overview"
+      >
+        <div class="summary-metric-card">
+          <span class="summary-metric-icon" aria-hidden="true">⏱️</span>
+          <div class="summary-metric-body">
+            <span class="summary-metric-label">Today’s Focus</span>
+            <strong class="summary-metric-value" id="summaryTodayTime"
+              >0 mins</strong
+            >
+            <span class="summary-metric-sub" id="summaryTodayGoal"
+              >Goal: 120 mins</span
+            >
+          </div>
+        </div>
+
+        <div class="summary-metric-card">
+          <span class="summary-metric-icon" aria-hidden="true">📈</span>
+          <div class="summary-metric-body">
+            <span class="summary-metric-label">Daily Progress</span>
+            <strong class="summary-metric-value" id="summaryProgressPercent"
+              >0%</strong
+            >
+            <span class="summary-metric-sub" id="summaryProgressSub"
+              >120m Daily Horizon</span
+            >
+          </div>
+        </div>
+
+        <div class="summary-metric-card">
+          <span class="summary-metric-icon" aria-hidden="true">🌱</span>
+          <div class="summary-metric-body">
+            <span class="summary-metric-label">Current Streak</span>
+            <strong class="summary-metric-value" id="summaryStreakCount"
+              >0 Days</strong
+            >
+            <span class="summary-metric-sub" id="summaryStreakSub"
+              >Consistent Rhythm</span
+            >
+          </div>
+        </div>
+
+        <div class="summary-metric-card">
+          <span class="summary-metric-icon" aria-hidden="true">🌿</span>
+          <div class="summary-metric-body">
+            <span class="summary-metric-label">Total Sessions</span>
+            <strong class="summary-metric-value" id="summaryTotalSessions"
+              >0 Logged</strong
+            >
+            <span class="summary-metric-sub" id="summaryTotalSessionsSub"
+              >Completed Blocks</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- Dashboard Content Grid -->
+      <div id="dashboard" class="dashboard-grid">
+        <!-- 1. Pomodoro Timer Placeholder -->
+        <section
+          id="timer"
+          class="card timer-card"
+          aria-labelledby="timer-heading"
+        >
+          <div class="card-header">
+            <div>
+              <span class="card-eyebrow">Mindful Interval</span>
+              <h2 id="timer-heading" class="card-title">Focus Rhythm</h2>
+            </div>
+            <span class="mode-badge" id="currentModeLabel">Focus Mode</span>
+          </div>
+
+          <div
+            class="timer-mode-selector"
+            role="group"
+            aria-label="Timer interval selection"
+          >
+            <button
+              type="button"
+              class="mode-btn active"
+              data-mode="focus"
+              data-duration="25:00"
+            >
+              Deep Focus (25m)
+            </button>
+            <button
+              type="button"
+              class="mode-btn"
+              data-mode="short-break"
+              data-duration="05:00"
+            >
+              Short Pause (5m)
+            </button>
+            <button
+              type="button"
+              class="mode-btn"
+              data-mode="long-break"
+              data-duration="15:00"
+            >
+              Restful Reset (15m)
+            </button>
+          </div>
+
+          <div class="timer-display-container">
+            <div
+              class="timer-circle"
+              role="timer"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <svg
+                class="progress-ring"
+                width="220"
+                height="220"
+                viewBox="0 0 220 220"
+                aria-hidden="true"
+              >
+                <circle
+                  class="ring-bg"
+                  cx="110"
+                  cy="110"
+                  r="96"
+                  stroke-width="8"
+                  fill="transparent"
+                />
+                <circle
+                  class="ring-progress"
+                  cx="110"
+                  cy="110"
+                  r="96"
+                  stroke-width="8"
+                  fill="transparent"
+                  stroke-dasharray="603"
+                  stroke-dashoffset="150"
+                />
+              </svg>
+              <div class="timer-digits-box">
+                <span class="timer-time" id="timerDisplay">25:00</span>
+                <span class="timer-subtext" id="timerIntention"
+                  >Sample Intention: Chapter 4 Review</span
+                >
+              </div>
+            </div>
+          </div>
+
+          <div class="timer-controls" id="timerControls">
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="startTimerBtn"
+              aria-label="Start mindful focus session"
+            >
+              <span class="btn-icon" aria-hidden="true">▶</span>
+              <span>Start Session</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="resetTimerBtn"
+              aria-label="Reset timer display to interval start"
+            >
+              <span class="btn-icon" aria-hidden="true">↺</span>
+              <span>Reset</span>
+            </button>
+          </div>
+
+          <!-- Mindful Session Completed State -->
+          <div
+            class="session-completed-card"
+            id="sessionCompletedPanel"
+            hidden
+            aria-live="polite"
+          >
+            <div class="completed-header">
+              <span class="completed-icon" aria-hidden="true">✨</span>
+              <div>
+                <h3 class="completed-title" id="completedTitle">
+                  Deep Focus Session Completed
+                </h3>
+                <p class="completed-subtext" id="completedSubtext">
+                  25 minutes of mindful focus recorded to your daily horizon.
+                </p>
+              </div>
+            </div>
+            <div class="completed-actions">
+              <button
+                type="button"
+                class="btn btn-primary"
+                id="completedTakeBreakBtn"
+              >
+                <span class="btn-icon" aria-hidden="true">☕</span>
+                <span>Take a 5m Pause</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="completedNextFocusBtn"
+              >
+                <span class="btn-icon" aria-hidden="true">🌿</span>
+                <span>Next Focus Block</span>
+              </button>
+            </div>
+          </div>
+
+          <p class="phase-notice">
+            🌱
+            <em>Mindful Rhythm: Live countdown with local persistence.</em>
+          </p>
+        </section>
+
+        <!-- 2. Daily 2-Hour Goal Placeholder (Accessible Progressbar & Demo State) -->
+        <section
+          id="goal"
+          class="card goal-card"
+          aria-labelledby="goal-heading"
+        >
+          <div class="card-header">
+            <div>
+              <span class="card-eyebrow">Sustainable Pace</span>
+              <h2 id="goal-heading" class="card-title">Daily Focus Horizon</h2>
+            </div>
+            <span class="goal-pill">Target: 2 Hours (120m)</span>
+          </div>
+
+          <div class="goal-stats-summary">
+            <div class="stat-block">
+              <span class="stat-number" id="focusMinutesValue">0</span>
+              <span class="stat-unit">mins invested today</span>
+            </div>
+            <div class="stat-divider" aria-hidden="true">/</div>
+            <div class="stat-block">
+              <span class="stat-number" id="focusGoalValue">120</span>
+              <span class="stat-unit">mins goal</span>
+            </div>
+          </div>
+
+          <div class="progress-track-wrapper">
+            <div
+              class="progress-bar-rail"
+              role="progressbar"
+              aria-valuenow="0"
+              aria-valuemin="0"
+              aria-valuemax="120"
+              aria-valuetext="0 of 120 minutes completed (0% of daily goal)"
+              aria-labelledby="goal-heading"
+            >
+              <div class="progress-bar-fill" style="width: 0%"></div>
+            </div>
+            <div class="milestone-markers" aria-hidden="true">
+              <span class="marker" style="left: 25%">30m</span>
+              <span class="marker" style="left: 50%">60m</span>
+              <span class="marker" style="left: 75%">90m</span>
+              <span class="marker" style="left: 100%">120m</span>
+            </div>
+          </div>
+
+          <div class="goal-encouragement">
+            <p class="encouragement-text" id="encouragementText">
+              🌟 <strong id="progressValue">0%</strong> of your daily focus goal
+              is complete. Keep your rhythm gentle and consistent.
+            </p>
+          </div>
+
+          <div class="goal-breakdown">
+            <div class="mini-stat">
+              <span class="mini-label">Completed focus blocks</span>
+              <strong class="mini-value" id="sessionCountValue"
+                >0 sessions</strong
+              >
+            </div>
+            <div class="mini-stat">
+              <span class="mini-label">Current pace</span>
+              <strong class="mini-value">Steady</strong>
+            </div>
+          </div>
+
+          <!-- Mindful Milestones & Reward Badges -->
+          <div
+            class="milestones-section"
+            aria-label="Mindful milestone achievements"
+          >
+            <div class="milestones-title-row">
+              <span class="milestones-heading">Milestone Achievements</span>
+              <span class="milestones-summary" id="milestonesUnlockedCount"
+                >0/4 Unlocked</span
+              >
+            </div>
+            <div class="milestones-grid">
+              <div
+                class="milestone-badge-item"
+                id="milestoneFirst"
+                data-unlocked="false"
+              >
+                <span class="milestone-icon" aria-hidden="true">🌱</span>
+                <div class="milestone-text">
+                  <strong class="milestone-title">First Step</strong>
+                  <span class="milestone-status" id="milestoneFirstStatus"
+                    >1 session</span
+                  >
+                </div>
+              </div>
+
+              <div
+                class="milestone-badge-item"
+                id="milestoneGoal"
+                data-unlocked="false"
+              >
+                <span class="milestone-icon" aria-hidden="true">🎯</span>
+                <div class="milestone-text">
+                  <strong class="milestone-title">Daily Horizon</strong>
+                  <span class="milestone-status" id="milestoneGoalStatus"
+                    >120 mins</span
+                  >
+                </div>
+              </div>
+
+              <div
+                class="milestone-badge-item"
+                id="milestoneStreak3"
+                data-unlocked="false"
+              >
+                <span class="milestone-icon" aria-hidden="true">🌿</span>
+                <div class="milestone-text">
+                  <strong class="milestone-title">3-Day Rhythm</strong>
+                  <span class="milestone-status" id="milestoneStreak3Status"
+                    >3 days</span
+                  >
+                </div>
+              </div>
+
+              <div
+                class="milestone-badge-item"
+                id="milestoneStreak7"
+                data-unlocked="false"
+              >
+                <span class="milestone-icon" aria-hidden="true">🏆</span>
+                <div class="milestone-text">
+                  <strong class="milestone-title">7-Day Rooted</strong>
+                  <span class="milestone-status" id="milestoneStreak7Status"
+                    >7 days</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. Phone & Mac Upload / Sync Placeholders (Semantic & Non-misleading) -->
+        <section
+          id="sync"
+          class="card sync-card"
+          aria-labelledby="sync-heading"
+        >
+          <div class="card-header">
+            <div>
+              <span class="card-eyebrow">Device Integration</span>
+              <h2 id="sync-heading" class="card-title">
+                Cross-Device Activity
+              </h2>
+            </div>
+            <span class="privacy-badge">🔒 Privacy-First Architecture</span>
+          </div>
+
+          <p class="card-description">
+            Seamlessly consolidate your study time from your laptop and mobile
+            device without intrusive tracking.
+          </p>
+
+          <!-- Semantically correct, non-interactive placeholder cards that stack cleanly -->
+          <div class="sync-dropzones">
+            <!-- Mac Upload Placeholder Card -->
+            <div class="dropzone-box placeholder-box" aria-disabled="true">
+              <div class="dropzone-icon" aria-hidden="true">💻</div>
+              <div class="dropzone-info">
+                <div class="dropzone-title-row">
+                  <h3 class="dropzone-title">Mac Study Log</h3>
+                  <span class="placeholder-status-tag"
+                    >Planned for Phase 3</span
+                  >
+                </div>
+                <p class="dropzone-hint">
+                  Future integration: import Screen Time or local study logs
+                  (.csv / .json).
+                </p>
+              </div>
+            </div>
+
+            <!-- Phone Upload Placeholder Card -->
+            <div class="dropzone-box placeholder-box" aria-disabled="true">
+              <div class="dropzone-icon" aria-hidden="true">📱</div>
+              <div class="dropzone-info">
+                <div class="dropzone-title-row">
+                  <h3 class="dropzone-title">Phone Focus Sync</h3>
+                  <span class="placeholder-status-tag"
+                    >Planned for Phase 3</span
+                  >
+                </div>
+                <p class="dropzone-hint">
+                  Future integration: sync Focus Mode session summaries or app
+                  lock check-ins.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="sync-reassurance">
+            <span class="reassurance-icon" aria-hidden="true">🛡️</span>
+            <span
+              >Built for privacy. Phase 2 operates locally; future phases will
+              support secure private backend storage without ad trackers or
+              third-party data selling.</span
+            >
+          </div>
+        </section>
+
+        <!-- 4. Session History -->
+        <section
+          id="history"
+          class="card history-card"
+          aria-labelledby="history-heading"
+        >
+          <div class="card-header">
+            <div>
+              <span class="card-eyebrow">Reflection &amp; Growth</span>
+              <h2 id="history-heading" class="card-title">
+                Recent Mindful Moments
+              </h2>
+            </div>
+            <span class="history-count" id="historyCount">0 Sessions</span>
+          </div>
+
+          <div class="demo-state-callout" role="note">
+            <span class="live-pill">Live</span>
+            <span
+              >Your focus history updates after each completed work block.</span
+            >
+          </div>
+
+          <ul class="history-list" aria-label="Recent study sessions">
+            <li class="history-item">
+              <div class="history-left">
+                <span class="session-icon" aria-hidden="true">✨</span>
+                <div>
+                  <strong class="session-title"
+                    >Your first session is waiting</strong
+                  >
+                  <span class="session-meta"
+                    >Start a focus block to begin tracking progress</span
+                  >
+                </div>
+              </div>
+              <div class="history-right">
+                <span class="session-duration">0 mins</span>
+                <span class="session-badge break">Ready</span>
+              </div>
+            </li>
+          </ul>
+
+          <div class="history-footer">
+            <p class="history-note">
+              💡 Each finished session adds to your daily focus total and stays
+              saved in your browser.
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Live Toast Notification Container for gentle feedback -->
+    <div
+      id="toastContainer"
+      class="toast-container"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+
+    <!-- Accessible Site Footer -->
+    <footer class="site-footer" role="contentinfo">
+      <div class="footer-container">
+        <p class="footer-left">
+          <strong>StudyCalm</strong> — Crafted for steady minds. Part of
+          Saurav’s web workspace.
+        </p>
+        <div class="footer-right">
+          <span class="phase-tag"
+            >Phase 4: Tracking Integrity &amp; Achievements</span
+          >
+          <a href="#main-content" class="back-to-top">Return to Top ↑</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
