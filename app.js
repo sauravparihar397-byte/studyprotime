@@ -3,6 +3,7 @@
 const STORAGE_KEY = "studycalm-state-v4";
 const PREV_STORAGE_KEY_V3 = "studycalm-state-v3";
 const LEGACY_STORAGE_KEY = "studycalm-state-v1";
+const PREFERENCES_KEY = "studycalm-preferences-v1";
 const DAILY_GOAL_MINUTES = 120;
 
 const MODE_CONFIG = {
@@ -32,17 +33,22 @@ const MODE_CONFIG = {
   },
 };
 
+// -----------------------------------------------------------------------------
+// Date & Time Utility Helpers
+// -----------------------------------------------------------------------------
+
 function getLocalDateString(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
 function getYesterdayDateString(today = new Date()) {
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  return getLocalDateString(yesterday);
+  const d = today instanceof Date ? new Date(today) : new Date(today);
+  d.setDate(d.getDate() - 1);
+  return getLocalDateString(d);
 }
 
 function formatDuration(totalSeconds) {
@@ -84,9 +90,9 @@ function getTotalFocusSessions(sessionHistory) {
 }
 
 /**
- * Deterministic streak calculator computed directly from session history dates.
+ * Deterministic streak calculator computed directly from unique study calendar dates.
  * Returns { count, status, lastStudyDate }
- * status: 'active' (studied today), 'waiting' (studied yesterday, waiting for today), 'inactive' (streak broken)
+ * status: 'active' (studied today), 'waiting' (studied yesterday, awaiting today), 'inactive' (streak broken)
  */
 function calculateStreak(sessionHistory, today = new Date()) {
   if (!Array.isArray(sessionHistory) || sessionHistory.length === 0) {
@@ -98,12 +104,10 @@ function calculateStreak(sessionHistory, today = new Date()) {
     return { count: 0, status: "inactive", lastStudyDate: null };
   }
 
-  // Set of unique study calendar dates
   const studyDatesSet = new Set(focusSessions.map((s) => s.date));
   const todayStr = getLocalDateString(today);
   const yesterdayStr = getYesterdayDateString(today);
 
-  // Find most recent study date
   const sortedDates = Array.from(studyDatesSet).sort().reverse();
   const mostRecentDate = sortedDates[0];
 
@@ -111,10 +115,10 @@ function calculateStreak(sessionHistory, today = new Date()) {
   let status;
 
   if (studyDatesSet.has(todayStr)) {
-    anchorDate = new Date(today);
+    anchorDate = today instanceof Date ? new Date(today) : new Date(today);
     status = "active";
   } else if (studyDatesSet.has(yesterdayStr)) {
-    anchorDate = new Date(today);
+    anchorDate = today instanceof Date ? new Date(today) : new Date(today);
     anchorDate.setDate(anchorDate.getDate() - 1);
     status = "waiting";
   } else {
@@ -142,45 +146,145 @@ function calculateStreak(sessionHistory, today = new Date()) {
 }
 
 /**
- * Check which milestones are unlocked based on SSOT data
+ * Milestone status computed directly from session history
  */
-function checkMilestoneUnlocks(todayMinutes, totalSessions, streakCount) {
+function getMilestones(sessionHistory, todayStr = getLocalDateString()) {
+  const totalSessions = getTotalFocusSessions(sessionHistory);
+  const todayMinutes = getTodayFocusMinutes(sessionHistory, todayStr);
+  const streak = calculateStreak(sessionHistory);
+
   return {
     firstStep: totalSessions >= 1,
     dailyGoal: todayMinutes >= DAILY_GOAL_MINUTES,
-    streak3: streakCount >= 3,
-    streak7: streakCount >= 7,
+    streak3: streak.count >= 3,
+    streak7: streak.count >= 7,
+    todayMinutes,
+    totalSessions,
+    streakCount: streak.count,
+    streakStatus: streak.status,
   };
 }
 
+/**
+ * Computes 7-day focus activity rhythm ending on the specified date.
+ * Returns { days: Array<{ dateStr, dayLabel, minutes, isToday }>, weekTotal, activeDays, dailyAvg }
+ */
+function getWeeklyTimelineData(sessionHistory, referenceDate = new Date()) {
+  const ref =
+    referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+  const todayStr = getLocalDateString(ref);
+  const days = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(ref);
+    d.setDate(ref.getDate() - i);
+    const dateStr = getLocalDateString(d);
+    const dayLabel = d.toLocaleDateString("en-US", { weekday: "short" });
+    const isToday = dateStr === todayStr;
+
+    const minutes = Array.isArray(sessionHistory)
+      ? sessionHistory
+          .filter((s) => s.type === "focus" && s.date === dateStr)
+          .reduce((sum, s) => sum + (Number(s.duration) || 0), 0)
+      : 0;
+
+    days.push({ dateStr, dayLabel, minutes, isToday });
+  }
+
+  const weekTotal = days.reduce((sum, d) => sum + d.minutes, 0);
+  const activeDays = days.filter((d) => d.minutes > 0).length;
+  const dailyAvg = Math.round(weekTotal / 7);
+
+  return { days, weekTotal, activeDays, dailyAvg };
+}
+
+/**
+ * Multi-layer history deduplication:
+ * 1. Checks exact IDs
+ * 2. Checks same date + type with completedAt timestamp within 45 seconds
+ * 3. Checks identical date + type + display time + duration
+ */
+function deduplicateHistory(history) {
+  if (!Array.isArray(history)) return [];
+
+  const seenIds = new Set();
+  const deduped = [];
+
+  for (const entry of history) {
+    if (!entry || typeof entry.date !== "string" || !entry.duration) continue;
+
+    const id = String(entry.id || "").trim();
+    if (id && seenIds.has(id)) {
+      continue;
+    }
+
+    const type = entry.type || (entry.mode === "focus" ? "focus" : "break");
+    const duration = Number(entry.duration) || 25;
+    const completedAt = Number(entry.completedAt) || 0;
+    const time = String(entry.time || "").trim();
+    const date = String(entry.date).trim();
+
+    const isDuplicate = deduped.some((existing) => {
+      if (existing.date !== date || existing.type !== type) return false;
+
+      // Close timestamp proximity
+      if (completedAt > 0 && existing.completedAt > 0) {
+        if (Math.abs(completedAt - existing.completedAt) < 45000) {
+          return true;
+        }
+      }
+
+      // Identical display time and duration
+      if (
+        time &&
+        existing.time &&
+        time === existing.time &&
+        existing.duration === duration
+      ) {
+        return true;
+      }
+
+      return false;
+    });
+
+    if (!isDuplicate) {
+      if (id) seenIds.add(id);
+      deduped.push({
+        id:
+          id ||
+          `sess_${completedAt || Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        mode: entry.mode || (type === "break" ? "short-break" : "focus"),
+        title:
+          entry.title || (type === "break" ? "Mindful Pause" : "Deep Focus"),
+        duration,
+        time: time || "Earlier",
+        date,
+        type,
+        completedAt: completedAt || Date.now(),
+      });
+    }
+  }
+
+  return deduped;
+}
+
 // -----------------------------------------------------------------------------
-// State Management & Migration
+// State Definition & Persistence
 // -----------------------------------------------------------------------------
 
 function createDefaultState() {
-  const today = getLocalDateString();
   return {
     version: 4,
     selectedMode: "focus",
     remainingSeconds: MODE_CONFIG.focus.duration,
     isRunning: false,
     targetEndTime: null,
-    currentDate: today,
-    todayFocusMinutes: 0,
-    totalFocusSessions: 0,
-    streak: {
-      count: 0,
-      lastStudyDate: null,
-    },
-    achievements: {
-      firstStep: null,
-      dailyGoal: null,
-      streak3: null,
-      streak7: null,
-    },
-    milestonesReached: {
-      halfway: false,
-      completed: false,
+    activeSessionId: null,
+    acknowledgedMilestones: {
+      firstStep: false,
+      dailyGoal: false,
+      streak3: false,
+      streak7: false,
     },
     sessionHistory: [],
     lastUpdatedAt: Date.now(),
@@ -192,32 +296,114 @@ let timerIntervalId = null;
 let isCompletingCycle = false;
 let sessionCompletedPending = false;
 
-window.addEventListener("DOMContentLoaded", () => {
-  restoreState();
-  initNavigation();
-  initModeSelector();
-  initTimerControls();
-  initSessionCompletedControls();
-  render();
-  console.log("🌿 StudyCalm Phase 4 Tracking Integrity & Achievements active.");
-});
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Safe Storage Fallback Wrapper (Graceful Degradation)
+// -----------------------------------------------------------------------------
+
+const memoryStorage = {};
+const safeStorage = {
+  getItem(key) {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+    } catch (e) {
+      console.warn(`Storage read notice for "${key}":`, e);
+    }
+    return memoryStorage[key] !== undefined ? memoryStorage[key] : null;
+  },
+  setItem(key, value) {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+    } catch (e) {
+      console.warn(`Storage write notice for "${key}":`, e);
+    }
+    memoryStorage[key] = String(value);
+  },
+};
+
+// -----------------------------------------------------------------------------
+// Phase 5 Preferences Management (Theme, Audio, Notifications, Onboarding)
+// -----------------------------------------------------------------------------
+
+function createDefaultPreferences() {
+  return {
+    theme: "light",
+    soundEnabled: false,
+    notificationsEnabled: false,
+    onboardingDismissed: false,
+  };
+}
+
+let preferences = createDefaultPreferences();
+
+function loadPreferences() {
+  try {
+    const raw = safeStorage.getItem(PREFERENCES_KEY);
+    if (!raw) return createDefaultPreferences();
+    const parsed = JSON.parse(raw);
+    return {
+      theme: parsed.theme === "dark" ? "dark" : "light",
+      soundEnabled: Boolean(parsed.soundEnabled),
+      notificationsEnabled: Boolean(parsed.notificationsEnabled),
+      onboardingDismissed: Boolean(parsed.onboardingDismissed),
+    };
+  } catch (e) {
+    return createDefaultPreferences();
+  }
+}
+
+function savePreferences() {
+  try {
+    safeStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+  } catch (e) {
+    console.warn("Unable to save preferences", e);
+  }
+}
+
+if (
+  typeof window !== "undefined" &&
+  typeof window.addEventListener === "function"
+) {
+  window.addEventListener("DOMContentLoaded", () => {
+    preferences = loadPreferences();
+    restoreState();
+    initNavigation();
+    initModeSelector();
+    initTimerControls();
+    initSessionCompletedControls();
+    initHeaderControls();
+    initOnboarding();
+    render();
+    console.log("🌿 StudyCalm SSOT state engine initialized successfully.");
+  });
+}
 
 function loadState() {
-  const today = getLocalDateString();
-
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const previousRaw = localStorage.getItem(PREV_STORAGE_KEY_V3);
-    const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    let raw = safeStorage.getItem(STORAGE_KEY);
+    let prevRaw = null;
+    let legacyRaw = null;
 
-    if (!raw && !previousRaw && !legacyRaw) {
+    if (!raw) {
+      prevRaw = safeStorage.getItem(PREV_STORAGE_KEY_V3);
+      if (!prevRaw) {
+        legacyRaw = safeStorage.getItem(LEGACY_STORAGE_KEY);
+      }
+    }
+
+    if (!raw && !prevRaw && !legacyRaw) {
       return createDefaultState();
     }
 
     const parsed = raw
       ? JSON.parse(raw)
-      : previousRaw
-        ? JSON.parse(previousRaw)
+      : prevRaw
+        ? JSON.parse(prevRaw)
         : JSON.parse(legacyRaw);
 
     const selectedMode = MODE_CONFIG[parsed.selectedMode]
@@ -225,53 +411,14 @@ function loadState() {
       : "focus";
     const modeDuration = MODE_CONFIG[selectedMode].duration;
 
-    const rawHistory = Array.isArray(parsed.sessionHistory)
-      ? parsed.sessionHistory
-      : [];
+    const dedupedHistory = deduplicateHistory(parsed.sessionHistory);
 
-    const validHistory = rawHistory
-      .filter(
-        (entry) =>
-          entry && typeof entry.date === "string" && Number(entry.duration) > 0,
-      )
-      .map((entry, index) => ({
-        id: entry.id || `sess_${Date.now()}_${index}`,
-        mode: entry.mode || "focus",
-        title: entry.title || "Deep Focus",
-        duration: Number(entry.duration) || 25,
-        time: entry.time || "Earlier",
-        date: entry.date,
-        type: entry.type || (entry.mode === "focus" ? "focus" : "break"),
-        completedAt: Number(entry.completedAt) || Date.now(),
-      }));
-
-    const dedupedHistory = [];
-    const seenIds = new Set();
-    for (const entry of validHistory) {
-      const duplicateKey = `${entry.date}-${entry.type}-${entry.duration}-${entry.time}`;
-      if (!seenIds.has(duplicateKey)) {
-        seenIds.add(duplicateKey);
-        dedupedHistory.push(entry);
-      }
-    }
-
-    const savedStreak =
-      parsed.streak && typeof parsed.streak === "object"
-        ? parsed.streak
-        : { count: 0, lastStudyDate: null };
-
-    const streak = {
-      count:
-        Number.isInteger(savedStreak.count) && savedStreak.count >= 0
-          ? savedStreak.count
-          : calculateStreak(dedupedHistory).count,
-      lastStudyDate:
-        typeof savedStreak.lastStudyDate === "string"
-          ? savedStreak.lastStudyDate
-          : calculateStreak(dedupedHistory).lastStudyDate,
+    const acknowledgedMilestones = {
+      firstStep: Boolean(parsed.acknowledgedMilestones?.firstStep),
+      dailyGoal: Boolean(parsed.acknowledgedMilestones?.dailyGoal),
+      streak3: Boolean(parsed.acknowledgedMilestones?.streak3),
+      streak7: Boolean(parsed.acknowledgedMilestones?.streak7),
     };
-
-    const historyTodayMinutes = getTodayFocusMinutes(dedupedHistory, today);
 
     return {
       version: 4,
@@ -284,23 +431,11 @@ function loadState() {
       targetEndTime: Number.isFinite(parsed.targetEndTime)
         ? parsed.targetEndTime
         : null,
-      currentDate: today,
-      todayFocusMinutes:
-        typeof parsed.currentDate === "string" && parsed.currentDate === today
-          ? historyTodayMinutes
-          : 0,
-      totalFocusSessions: getTotalFocusSessions(dedupedHistory),
-      streak,
-      achievements: {
-        firstStep: parsed.achievements?.firstStep || null,
-        dailyGoal: parsed.achievements?.dailyGoal || null,
-        streak3: parsed.achievements?.streak3 || null,
-        streak7: parsed.achievements?.streak7 || null,
-      },
-      milestonesReached: {
-        halfway: Boolean(parsed.milestonesReached?.halfway),
-        completed: Boolean(parsed.milestonesReached?.completed),
-      },
+      activeSessionId:
+        typeof parsed.activeSessionId === "string"
+          ? parsed.activeSessionId
+          : null,
+      acknowledgedMilestones,
       sessionHistory: dedupedHistory,
       lastUpdatedAt: Number.isFinite(parsed.lastUpdatedAt)
         ? parsed.lastUpdatedAt
@@ -314,9 +449,19 @@ function loadState() {
 
 function saveState() {
   try {
-    localStorage.setItem(
+    safeStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ ...state, lastUpdatedAt: Date.now() }),
+      JSON.stringify({
+        version: 4,
+        selectedMode: state.selectedMode,
+        remainingSeconds: state.remainingSeconds,
+        isRunning: state.isRunning,
+        targetEndTime: state.targetEndTime,
+        activeSessionId: state.activeSessionId,
+        acknowledgedMilestones: state.acknowledgedMilestones,
+        sessionHistory: state.sessionHistory,
+        lastUpdatedAt: Date.now(),
+      }),
     );
   } catch (error) {
     console.warn("Unable to save study state", error);
@@ -334,6 +479,7 @@ function restoreState() {
       state.remainingSeconds = 0;
       completeFocusCycle(true);
     } else {
+      // Session is still active; calculate remaining seconds and restart ticker
       state.remainingSeconds = Math.max(
         0,
         Math.ceil((state.targetEndTime - now) / 1000),
@@ -344,10 +490,12 @@ function restoreState() {
     state.isRunning = false;
     state.targetEndTime = null;
   }
+
+  saveState();
 }
 
 // -----------------------------------------------------------------------------
-// UI Initializers & Event Handlers
+// UI Navigation & Mode Selection
 // -----------------------------------------------------------------------------
 
 function initNavigation() {
@@ -387,6 +535,7 @@ function initModeSelector() {
       state.remainingSeconds = MODE_CONFIG[state.selectedMode].duration;
       state.isRunning = false;
       state.targetEndTime = null;
+      state.activeSessionId = null;
 
       clearInterval(timerIntervalId);
       timerIntervalId = null;
@@ -456,6 +605,7 @@ function selectMode(modeKey) {
   state.remainingSeconds = MODE_CONFIG[modeKey].duration;
   state.isRunning = false;
   state.targetEndTime = null;
+  state.activeSessionId = null;
 
   clearInterval(timerIntervalId);
   timerIntervalId = null;
@@ -489,8 +639,8 @@ function showSessionCompletedPanel(modeConfig) {
   if (subtext) {
     subtext.textContent =
       modeConfig.type === "focus"
-        ? `${Math.round(modeConfig.duration / 60)} minutes of steady focus recorded to your daily horizon.`
-        : "Rest and reset complete. Ready to return with clear focus.";
+        ? `${Math.round(modeConfig.duration / 60)} minutes of mindful focus recorded to your daily horizon.`
+        : "Rest and reset complete. Ready to return with fresh focus.";
   }
 
   panel.hidden = false;
@@ -515,6 +665,11 @@ function resumeTimer() {
 
   if (state.remainingSeconds <= 0) {
     state.remainingSeconds = MODE_CONFIG[state.selectedMode].duration;
+  }
+
+  // Bind a unique idempotency ID for this session if not already set
+  if (!state.activeSessionId) {
+    state.activeSessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   }
 
   state.isRunning = true;
@@ -586,6 +741,7 @@ function resetCurrentTimer() {
 
   state.isRunning = false;
   state.targetEndTime = null;
+  state.activeSessionId = null;
   state.remainingSeconds = MODE_CONFIG[state.selectedMode].duration;
   state.lastUpdatedAt = Date.now();
 
@@ -597,7 +753,7 @@ function resetCurrentTimer() {
 }
 
 // -----------------------------------------------------------------------------
-// Cycle Completion & Anti-Duplicate Validation
+// Cycle Completion & Anti-Duplicate Processing
 // -----------------------------------------------------------------------------
 
 function completeFocusCycle(fromReload = false) {
@@ -617,24 +773,28 @@ function completeFocusCycle(fromReload = false) {
     const now = new Date();
     const today = getLocalDateString(now);
 
-    state.currentDate = today;
+    const milestonesBefore = getMilestones(state.sessionHistory, today);
 
-    // Generate unique session ID
-    const sessionId = `sess_${now.getTime()}_${Math.random().toString(36).slice(2, 7)}`;
+    // Use established activeSessionId or create a new deterministic one
+    const sessionId =
+      state.activeSessionId ||
+      `sess_${now.getTime()}_${Math.random().toString(36).slice(2, 7)}`;
+
     const timeDisplay = now.toLocaleTimeString([], {
       hour: "numeric",
       minute: "2-digit",
     });
 
-    // Anti-duplicate validation: check if identical session logged within 15 seconds
-    const isDuplicate = state.sessionHistory.some(
+    // Anti-duplicate verification: check by ID or within 45-second window
+    const alreadyLogged = state.sessionHistory.some(
       (entry) =>
-        entry.date === today &&
-        entry.type === modeConfig.type &&
-        Math.abs((entry.completedAt || 0) - now.getTime()) < 15000,
+        entry.id === sessionId ||
+        (entry.date === today &&
+          entry.type === modeConfig.type &&
+          Math.abs((entry.completedAt || 0) - now.getTime()) < 45000),
     );
 
-    if (!isDuplicate) {
+    if (!alreadyLogged) {
       state.sessionHistory.unshift({
         id: sessionId,
         mode: currentMode,
@@ -646,28 +806,92 @@ function completeFocusCycle(fromReload = false) {
         type: modeConfig.type,
       });
 
-      // Keep recent 30 entries
-      state.sessionHistory = state.sessionHistory.slice(0, 30);
+      // Keep recent 30 entries, strictly deduplicated
+      state.sessionHistory = deduplicateHistory(state.sessionHistory).slice(
+        0,
+        30,
+      );
     }
 
-    // Reset timer display to mode duration
+    state.activeSessionId = null;
     state.remainingSeconds = modeConfig.duration;
     state.lastUpdatedAt = Date.now();
-
-    // Check & trigger achievements
-    evaluateAchievements(fromReload);
 
     saveState();
     render();
 
     if (!fromReload) {
+      const milestonesAfter = getMilestones(state.sessionHistory, today);
+
+      // Check new milestone unlocks
+      if (
+        milestonesAfter.firstStep &&
+        !milestonesBefore.firstStep &&
+        !state.acknowledgedMilestones.firstStep
+      ) {
+        state.acknowledgedMilestones.firstStep = true;
+        showToast(
+          "🌱 Achievement Unlocked: First Step — Showing up matters.",
+          "milestone",
+        );
+      }
+
+      if (
+        milestonesAfter.dailyGoal &&
+        !milestonesBefore.dailyGoal &&
+        !state.acknowledgedMilestones.dailyGoal
+      ) {
+        state.acknowledgedMilestones.dailyGoal = true;
+        showToast(
+          "🎯 Achievement Unlocked: Daily Horizon Fulfilled (120 mins)!",
+          "milestone",
+        );
+      }
+
+      if (
+        milestonesAfter.streak3 &&
+        !milestonesBefore.streak3 &&
+        !state.acknowledgedMilestones.streak3
+      ) {
+        state.acknowledgedMilestones.streak3 = true;
+        showToast(
+          "🌿 Achievement Unlocked: 3-Day Rhythm — Consistency taking root.",
+          "milestone",
+        );
+      }
+
+      if (
+        milestonesAfter.streak7 &&
+        !milestonesBefore.streak7 &&
+        !state.acknowledgedMilestones.streak7
+      ) {
+        state.acknowledgedMilestones.streak7 = true;
+        showToast(
+          "🏆 Achievement Unlocked: 7-Day Rooted — Deep focus habit.",
+          "milestone",
+        );
+      }
+
+      saveState();
       showSessionCompletedPanel(modeConfig);
+
+      // Mindful audio chime & desktop notification
+      playMindfulChime();
+
       if (modeConfig.type === "focus") {
+        sendBrowserNotification(
+          "StudyCalm 🌿 Focus Block Complete",
+          "Time for a peaceful 5-minute pause. Great dedication!",
+        );
         showToast(
           "🌿 Focus block complete. Time for a peaceful pause.",
           "milestone",
         );
       } else {
+        sendBrowserNotification(
+          `StudyCalm ☕ ${modeConfig.label} Complete`,
+          "Ready to return to deep focus with fresh energy.",
+        );
         showToast(
           `☕ ${modeConfig.label} complete. Ready to return with fresh focus.`,
         );
@@ -678,61 +902,8 @@ function completeFocusCycle(fromReload = false) {
   }
 }
 
-function evaluateAchievements(silent = false) {
-  const todayMinutes = getTodayFocusMinutes(state.sessionHistory);
-  const totalSessions = getTotalFocusSessions(state.sessionHistory);
-  const streakData = calculateStreak(state.sessionHistory);
-  const unlocks = checkMilestoneUnlocks(
-    todayMinutes,
-    totalSessions,
-    streakData.count,
-  );
-
-  const now = Date.now();
-
-  if (unlocks.firstStep && !state.achievements.firstStep) {
-    state.achievements.firstStep = now;
-    if (!silent) {
-      showToast(
-        "🌱 Achievement Unlocked: First Step — Showing up matters.",
-        "milestone",
-      );
-    }
-  }
-
-  if (unlocks.dailyGoal && !state.achievements.dailyGoal) {
-    state.achievements.dailyGoal = now;
-    if (!silent) {
-      showToast(
-        "🎯 Achievement Unlocked: Daily Horizon Fulfilled (120 mins)!",
-        "milestone",
-      );
-    }
-  }
-
-  if (unlocks.streak3 && !state.achievements.streak3) {
-    state.achievements.streak3 = now;
-    if (!silent) {
-      showToast(
-        "🌿 Achievement Unlocked: 3-Day Rhythm — Consistency taking root.",
-        "milestone",
-      );
-    }
-  }
-
-  if (unlocks.streak7 && !state.achievements.streak7) {
-    state.achievements.streak7 = now;
-    if (!silent) {
-      showToast(
-        "🏆 Achievement Unlocked: 7-Day Rooted — Deep focus habit.",
-        "milestone",
-      );
-    }
-  }
-}
-
 // -----------------------------------------------------------------------------
-// DOM Rendering & Microcopy
+// DOM Rendering
 // -----------------------------------------------------------------------------
 
 function getEncouragementText(completedMinutes, goalMinutes) {
@@ -770,13 +941,16 @@ function renderTimerDigits() {
 function render() {
   renderTimerDigits();
 
-  // SSOT Computed Metrics
-  const todayMinutes = getTodayFocusMinutes(state.sessionHistory);
-  const totalFocusSessions = getTotalFocusSessions(state.sessionHistory);
-  const streakData = calculateStreak(state.sessionHistory);
+  // SSOT Computed Values
+  const todayStr = getLocalDateString();
+  const milestones = getMilestones(state.sessionHistory, todayStr);
+  const todayMinutes = milestones.todayMinutes;
+  const totalFocusSessions = milestones.totalSessions;
+  const streakCount = milestones.streakCount;
+  const streakStatus = milestones.streakStatus;
   const progressPercent = calculateProgress(todayMinutes, DAILY_GOAL_MINUTES);
 
-  // Timer card text
+  // Timer Intention & Mode Labels
   const timerIntention = document.getElementById("timerIntention");
   if (timerIntention) {
     timerIntention.textContent = `Focus: ${MODE_CONFIG[state.selectedMode].intention}`;
@@ -787,7 +961,7 @@ function render() {
     currentModeLabel.textContent = MODE_CONFIG[state.selectedMode].label;
   }
 
-  // Summary Metrics Strip (Phase 4)
+  // Summary Metrics Strip
   const summaryTodayTime = document.getElementById("summaryTodayTime");
   if (summaryTodayTime) {
     summaryTodayTime.textContent = `${todayMinutes} mins`;
@@ -815,15 +989,15 @@ function render() {
 
   const summaryStreakCount = document.getElementById("summaryStreakCount");
   if (summaryStreakCount) {
-    summaryStreakCount.textContent = `${streakData.count} ${streakData.count === 1 ? "Day" : "Days"}`;
+    summaryStreakCount.textContent = `${streakCount} ${streakCount === 1 ? "Day" : "Days"}`;
   }
 
   const summaryStreakSub = document.getElementById("summaryStreakSub");
   if (summaryStreakSub) {
     summaryStreakSub.textContent =
-      streakData.status === "active"
+      streakStatus === "active"
         ? "Logged Today ✨"
-        : streakData.status === "waiting"
+        : streakStatus === "waiting"
           ? "Log a session today"
           : "Ready to start";
   }
@@ -840,7 +1014,7 @@ function render() {
     summaryTotalSessionsSub.textContent = "Completed Blocks";
   }
 
-  // Goal card updates
+  // Daily Goal Card
   const focusMinutesValue = document.getElementById("focusMinutesValue");
   if (focusMinutesValue) {
     focusMinutesValue.textContent = String(todayMinutes);
@@ -886,10 +1060,10 @@ function render() {
   // Streak Banner in Welcome Section
   const streakDisplay = document.getElementById("streakDisplay");
   if (streakDisplay) {
-    if (streakData.status === "active") {
-      streakDisplay.textContent = `${streakData.count} ${streakData.count === 1 ? "day" : "days"} of calm dedication (Logged today)`;
-    } else if (streakData.status === "waiting") {
-      streakDisplay.textContent = `${streakData.count} ${streakData.count === 1 ? "day" : "days"} streak • Log a session today to continue`;
+    if (streakStatus === "active") {
+      streakDisplay.textContent = `${streakCount} ${streakCount === 1 ? "day" : "days"} of calm dedication (Logged today)`;
+    } else if (streakStatus === "waiting") {
+      streakDisplay.textContent = `${streakCount} ${streakCount === 1 ? "day" : "days"} streak • Log a session today to continue`;
     } else {
       streakDisplay.textContent = "0 days • Start your first focus block today";
     }
@@ -898,14 +1072,14 @@ function render() {
   const streakPill = document.getElementById("streakPill");
   if (streakPill) {
     streakPill.textContent =
-      streakData.status === "active"
+      streakStatus === "active"
         ? "Logged Today"
-        : streakData.status === "waiting"
+        : streakStatus === "waiting"
           ? "Active Streak"
           : "Ready";
   }
 
-  // Timer controls & action labels
+  // Timer Controls Buttons & State
   const startBtn =
     document.getElementById("startTimerBtn") ||
     document.getElementById("startTimerPlaceholder");
@@ -942,7 +1116,7 @@ function render() {
   }
 
   // Milestone Badges Showcase
-  renderMilestones(todayMinutes, totalFocusSessions, streakData.count);
+  renderMilestones(milestones);
 
   // History List
   const historyCount = document.getElementById("historyCount");
@@ -950,7 +1124,6 @@ function render() {
     historyCount.textContent = `${state.sessionHistory.length} ${state.sessionHistory.length === 1 ? "Session" : "Sessions"}`;
   }
 
-  const todayStr = getLocalDateString();
   const historyList = document.querySelector(".history-list");
   if (historyList) {
     historyList.innerHTML = state.sessionHistory.length
@@ -989,60 +1162,76 @@ function render() {
         </li>
       `;
   }
+
+  // Phase 5: Weekly Activity Timeline (7-Day Focus Rhythm)
+  renderWeeklyTimeline(state.sessionHistory);
 }
 
-function renderMilestones(todayMinutes, totalSessions, streakCount) {
-  const unlocks = checkMilestoneUnlocks(
-    todayMinutes,
-    totalSessions,
-    streakCount,
-  );
-
+function renderMilestones(milestones) {
   const mFirst = document.getElementById("milestoneFirst");
   const mFirstStatus = document.getElementById("milestoneFirstStatus");
   if (mFirst) {
-    mFirst.setAttribute("data-unlocked", unlocks.firstStep ? "true" : "false");
+    mFirst.setAttribute(
+      "data-unlocked",
+      milestones.firstStep ? "true" : "false",
+    );
   }
   if (mFirstStatus) {
-    mFirstStatus.textContent = unlocks.firstStep ? "Unlocked ✨" : "1 session";
+    mFirstStatus.textContent = milestones.firstStep
+      ? "Unlocked ✨"
+      : "1 session";
   }
 
   const mGoal = document.getElementById("milestoneGoal");
   const mGoalStatus = document.getElementById("milestoneGoalStatus");
   if (mGoal) {
-    mGoal.setAttribute("data-unlocked", unlocks.dailyGoal ? "true" : "false");
+    mGoal.setAttribute(
+      "data-unlocked",
+      milestones.dailyGoal ? "true" : "false",
+    );
   }
   if (mGoalStatus) {
-    mGoalStatus.textContent = unlocks.dailyGoal
+    mGoalStatus.textContent = milestones.dailyGoal
       ? "Achieved 🎯"
-      : `${todayMinutes}/${DAILY_GOAL_MINUTES}m`;
+      : `${milestones.todayMinutes}/${DAILY_GOAL_MINUTES}m`;
   }
 
   const mStreak3 = document.getElementById("milestoneStreak3");
   const mStreak3Status = document.getElementById("milestoneStreak3Status");
   if (mStreak3) {
-    mStreak3.setAttribute("data-unlocked", unlocks.streak3 ? "true" : "false");
+    mStreak3.setAttribute(
+      "data-unlocked",
+      milestones.streak3 ? "true" : "false",
+    );
   }
   if (mStreak3Status) {
-    mStreak3Status.textContent = unlocks.streak3
+    mStreak3Status.textContent = milestones.streak3
       ? "Active 🌿"
-      : `${Math.min(3, streakCount)}/3 days`;
+      : `${Math.min(3, milestones.streakCount)}/3 days`;
   }
 
   const mStreak7 = document.getElementById("milestoneStreak7");
   const mStreak7Status = document.getElementById("milestoneStreak7Status");
   if (mStreak7) {
-    mStreak7.setAttribute("data-unlocked", unlocks.streak7 ? "true" : "false");
+    mStreak7.setAttribute(
+      "data-unlocked",
+      milestones.streak7 ? "true" : "false",
+    );
   }
   if (mStreak7Status) {
-    mStreak7Status.textContent = unlocks.streak7
+    mStreak7Status.textContent = milestones.streak7
       ? "Rooted 🏆"
-      : `${Math.min(7, streakCount)}/7 days`;
+      : `${Math.min(7, milestones.streakCount)}/7 days`;
   }
 
   const summary = document.getElementById("milestonesUnlockedCount");
   if (summary) {
-    const totalUnlocked = Object.values(unlocks).filter(Boolean).length;
+    const totalUnlocked = [
+      milestones.firstStep,
+      milestones.dailyGoal,
+      milestones.streak3,
+      milestones.streak7,
+    ].filter(Boolean).length;
     summary.textContent = `${totalUnlocked}/4 Unlocked`;
   }
 }
@@ -1087,12 +1276,370 @@ function showToast(message, type = "normal") {
 }
 
 // -----------------------------------------------------------------------------
+// Phase 5: Theme, Audio Alerts, Browser Notifications, Onboarding, and Timeline
+// -----------------------------------------------------------------------------
+
+function applyTheme(theme) {
+  if (theme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+
+  const themeIcon = document.getElementById("themeIcon");
+  const themeBtn = document.getElementById("themeToggleBtn");
+  if (themeIcon) {
+    themeIcon.textContent = theme === "dark" ? "☀️" : "🌙";
+  }
+  if (themeBtn) {
+    themeBtn.setAttribute(
+      "aria-label",
+      theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
+    );
+    themeBtn.title =
+      theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+    themeBtn.classList.toggle("is-active", theme === "dark");
+  }
+}
+
+function toggleTheme() {
+  preferences.theme = preferences.theme === "dark" ? "light" : "dark";
+  applyTheme(preferences.theme);
+  savePreferences();
+  showToast(
+    preferences.theme === "dark"
+      ? "🌙 Calm Dark theme enabled."
+      : "☀️ Light theme enabled.",
+  );
+}
+
+let audioCtx = null;
+
+function playMindfulChime() {
+  if (!preferences.soundEnabled) return;
+
+  try {
+    const AudioCtx =
+      typeof window !== "undefined"
+        ? window.AudioContext || window.webkitAudioContext
+        : null;
+    if (!AudioCtx) return;
+
+    if (!audioCtx) {
+      audioCtx = new AudioCtx();
+    }
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume().catch((err) => {
+        console.warn("AudioContext resume deferred until user gesture", err);
+      });
+    }
+
+    const now = audioCtx.currentTime;
+    // Harmonic frequencies: 528 Hz (fundamental) & 792 Hz (harmonic 3:2 fifth)
+    const tones = [
+      { freq: 528, gain: 0.25, duration: 2.8 },
+      { freq: 792, gain: 0.12, duration: 2.2 },
+    ];
+
+    tones.forEach((tone) => {
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(tone.freq, now);
+
+      gainNode.gain.setValueAtTime(0.0001, now);
+      gainNode.gain.exponentialRampToValueAtTime(tone.gain, now + 0.08);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + tone.duration);
+
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + tone.duration + 0.1);
+    });
+  } catch (err) {
+    console.warn("Audio chime notice:", err);
+  }
+}
+
+function updateSoundButtonUI() {
+  const soundBtn = document.getElementById("soundToggleBtn");
+  const soundIcon = document.getElementById("soundIcon");
+  if (soundIcon) {
+    soundIcon.textContent = preferences.soundEnabled ? "🔔" : "🔇";
+  }
+  if (soundBtn) {
+    soundBtn.classList.toggle("is-active", preferences.soundEnabled);
+    soundBtn.setAttribute(
+      "aria-label",
+      preferences.soundEnabled
+        ? "Mute chime sound alerts"
+        : "Enable chime sound alerts",
+    );
+    soundBtn.title = preferences.soundEnabled
+      ? "Chime sound: Enabled (click to mute)"
+      : "Chime sound: Muted (click to enable)";
+  }
+}
+
+function toggleSound() {
+  preferences.soundEnabled = !preferences.soundEnabled;
+  savePreferences();
+  updateSoundButtonUI();
+  if (preferences.soundEnabled) {
+    playMindfulChime();
+    showToast("🔔 Mindful chime enabled (testing tone).");
+  } else {
+    showToast("🔇 Mindful chime muted.");
+  }
+}
+
+function updateNotificationButtonUI() {
+  const notifBtn = document.getElementById("notifToggleBtn");
+  const notifIcon = document.getElementById("notifIcon");
+  const isGranted =
+    typeof Notification !== "undefined" &&
+    Notification.permission === "granted" &&
+    preferences.notificationsEnabled;
+
+  if (notifIcon) {
+    notifIcon.textContent = isGranted ? "🔔" : "🔕";
+  }
+  if (notifBtn) {
+    notifBtn.classList.toggle("is-active", isGranted);
+    notifBtn.setAttribute(
+      "aria-label",
+      isGranted
+        ? "Disable browser notifications"
+        : "Enable browser notifications",
+    );
+    notifBtn.title = isGranted
+      ? "Notifications: Enabled (click to disable)"
+      : "Notifications: Off (click to enable)";
+  }
+}
+
+function requestNotificationPermission() {
+  if (typeof Notification === "undefined") {
+    showToast("Browser notifications are not supported in this browser.");
+    return;
+  }
+
+  if (Notification.permission === "granted") {
+    preferences.notificationsEnabled = !preferences.notificationsEnabled;
+    savePreferences();
+    updateNotificationButtonUI();
+    showToast(
+      preferences.notificationsEnabled
+        ? "🔔 Browser notifications enabled."
+        : "🔕 Browser notifications disabled.",
+    );
+  } else if (Notification.permission === "denied") {
+    preferences.notificationsEnabled = false;
+    savePreferences();
+    updateNotificationButtonUI();
+    showToast("Notifications are blocked in your browser settings.");
+  } else {
+    const handleResult = (permission) => {
+      if (permission === "granted") {
+        preferences.notificationsEnabled = true;
+        savePreferences();
+        updateNotificationButtonUI();
+        showToast("🔔 Notifications enabled for session transitions!");
+        sendBrowserNotification(
+          "StudyCalm 🌿",
+          "Notifications are now active for your focus cycles.",
+        );
+      } else {
+        preferences.notificationsEnabled = false;
+        savePreferences();
+        updateNotificationButtonUI();
+        showToast("Notification permission was not granted.");
+      }
+    };
+
+    try {
+      const p = Notification.requestPermission(handleResult);
+      if (p && typeof p.then === "function") {
+        p.then(handleResult).catch(() => {});
+      }
+    } catch (e) {
+      console.warn("Notification request permission notice:", e);
+    }
+  }
+}
+
+function sendBrowserNotification(title, body) {
+  if (!preferences.notificationsEnabled) return;
+  if (
+    typeof Notification === "undefined" ||
+    Notification.permission !== "granted"
+  )
+    return;
+
+  try {
+    new Notification(title, {
+      body,
+      icon: "🌱",
+      silent: true,
+    });
+  } catch (e) {
+    console.warn("Unable to dispatch notification", e);
+  }
+}
+
+function initHeaderControls() {
+  const soundBtn = document.getElementById("soundToggleBtn");
+  if (soundBtn && soundBtn.dataset.initialized !== "true") {
+    soundBtn.dataset.initialized = "true";
+    soundBtn.addEventListener("click", toggleSound);
+  }
+
+  const notifBtn = document.getElementById("notifToggleBtn");
+  if (notifBtn && notifBtn.dataset.initialized !== "true") {
+    notifBtn.dataset.initialized = "true";
+    notifBtn.addEventListener("click", requestNotificationPermission);
+  }
+
+  const themeBtn = document.getElementById("themeToggleBtn");
+  if (themeBtn && themeBtn.dataset.initialized !== "true") {
+    themeBtn.dataset.initialized = "true";
+    themeBtn.addEventListener("click", toggleTheme);
+  }
+
+  applyTheme(preferences.theme);
+  updateSoundButtonUI();
+  updateNotificationButtonUI();
+}
+
+function initOnboarding() {
+  const modal = document.getElementById("onboardingModal");
+  const dismissBtn = document.getElementById("dismissOnboardingBtn");
+  if (!modal || !dismissBtn) return;
+
+  if (modal.dataset.initialized === "true") return;
+  modal.dataset.initialized = "true";
+
+  const mainContent = document.getElementById("main-content");
+  const focusableSelector =
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  let lastFocusedElement = null;
+
+  const setModalState = (isOpen) => {
+    if (isOpen) {
+      lastFocusedElement = document.activeElement;
+      modal.removeAttribute("hidden");
+      if (mainContent) mainContent.setAttribute("inert", "");
+      dismissBtn.focus();
+    } else {
+      modal.setAttribute("hidden", "");
+      if (mainContent) mainContent.removeAttribute("inert");
+      if (
+        lastFocusedElement &&
+        typeof lastFocusedElement.focus === "function"
+      ) {
+        lastFocusedElement.focus();
+      }
+    }
+  };
+
+  const closeModal = () => {
+    if (modal.hasAttribute("hidden")) return;
+    setModalState(false);
+    preferences.onboardingDismissed = true;
+    savePreferences();
+    showToast("🌿 Welcome! May your study practice bring clarity and calm.");
+  };
+
+  if (!preferences.onboardingDismissed) {
+    setModalState(true);
+  }
+
+  dismissBtn.addEventListener("click", closeModal);
+
+  modal.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.hasAttribute("hidden")) {
+      closeModal();
+      return;
+    }
+
+    if (e.key !== "Tab" || modal.hasAttribute("hidden")) return;
+
+    const focusableElements = Array.from(
+      modal.querySelectorAll(focusableSelector),
+    );
+    if (focusableElements.length === 0) return;
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    if (e.shiftKey && document.activeElement === firstElement) {
+      e.preventDefault();
+      lastElement.focus();
+    } else if (!e.shiftKey && document.activeElement === lastElement) {
+      e.preventDefault();
+      firstElement.focus();
+    }
+  });
+}
+
+function renderWeeklyTimeline(sessionHistory) {
+  const container = document.getElementById("timelineBars");
+  if (!container) return;
+
+  const { days, weekTotal, activeDays, dailyAvg } =
+    getWeeklyTimelineData(sessionHistory);
+
+  const maxMinutes = Math.max(120, ...days.map((d) => d.minutes));
+
+  // Update summary stats
+  const badgeEl = document.getElementById("timelineSummaryBadge");
+  if (badgeEl) badgeEl.textContent = `${weekTotal} mins this week`;
+
+  const totalEl = document.getElementById("timelineWeekTotal");
+  if (totalEl) totalEl.textContent = `${weekTotal} mins`;
+
+  const activeEl = document.getElementById("timelineActiveDays");
+  if (activeEl) activeEl.textContent = `${activeDays} / 7 days`;
+
+  const avgEl = document.getElementById("timelineDailyAvg");
+  if (avgEl) avgEl.textContent = `${dailyAvg} mins/day`;
+
+  // Render 7-day columns
+  container.innerHTML = days
+    .map((day) => {
+      const fillPct =
+        day.minutes > 0
+          ? Math.max(
+              8,
+              Math.min(100, Math.round((day.minutes / maxMinutes) * 100)),
+            )
+          : 0;
+      const todayClass = day.isToday ? "is-today" : "";
+      const valLabel = day.minutes > 0 ? `${day.minutes}m` : "0m";
+
+      return `
+      <div class="timeline-bar-column ${todayClass}" title="${day.dateStr}: ${day.minutes} focus minutes">
+        <span class="timeline-bar-val">${valLabel}</span>
+        <div class="timeline-bar-rail">
+          <div class="timeline-bar-fill" style="height: ${fillPct}%"></div>
+        </div>
+        <span class="timeline-bar-day">${day.dayLabel}</span>
+      </div>
+    `.trim();
+    })
+    .join("");
+}
+
+// -----------------------------------------------------------------------------
 // Module Exports for Testing
 // -----------------------------------------------------------------------------
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     MODE_CONFIG,
     DAILY_GOAL_MINUTES,
+    PREFERENCES_KEY,
     parseDuration,
     formatDuration,
     calculateProgress,
@@ -1101,7 +1648,10 @@ if (typeof module !== "undefined" && module.exports) {
     getTodayFocusMinutes,
     getTotalFocusSessions,
     calculateStreak,
-    checkMilestoneUnlocks,
+    getMilestones,
+    getWeeklyTimelineData,
+    deduplicateHistory,
     createDefaultState,
+    createDefaultPreferences,
   };
 }

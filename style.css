@@ -1247,3 +1247,400 @@ ul {
     scroll-behavior: auto !important;
   }
 }
+
+/* ==========================================================================
+   Phase 5: Mindful Polish & Themes
+   - Dark Theme (Deep Pine & Charcoal Slate)
+   - Header Controls (Sound, Notifications, Theme)
+   - First-Use Onboarding Dialog
+   - Weekly Activity Timeline (7-Day Focus Rhythm)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Dark Theme Palette Overrides
+   -------------------------------------------------------------------------- */
+[data-theme="dark"] {
+  --bg-app: #111815;
+  --bg-surface: #17211c;
+  --bg-surface-elevated: #1f2c25;
+  --bg-subtle: #212e27;
+  --bg-subtle-hover: #293a31;
+
+  --primary: #52b788;
+  --primary-hover: #74c69d;
+  --primary-subtle: rgba(82, 183, 136, 0.2);
+  --primary-glow: rgba(82, 183, 136, 0.25);
+
+  --accent-gold: #ecc94b;
+  --accent-gold-bg: rgba(236, 201, 75, 0.16);
+  --accent-blue: #63b3ed;
+  --accent-blue-bg: rgba(99, 179, 237, 0.16);
+  --accent-amber: #f6ad55;
+  --accent-amber-bg: rgba(246, 173, 85, 0.16);
+
+  --text-main: #f0fdf4;
+  --text-muted: #9bb0a4;
+  --text-subtle: #72877b;
+  --border-light: #2b3b32;
+  --border-card: #27362d;
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.45);
+  --shadow-elevated: 0 10px 32px rgba(0, 0, 0, 0.55);
+}
+
+[data-theme="dark"] .welcome-banner {
+  background: linear-gradient(135deg, #17211c 0%, #1a2a22 100%);
+}
+
+[data-theme="dark"] .daily-badge {
+  background: #1f2c25;
+}
+
+[data-theme="dark"] .timer-circle {
+  background: radial-gradient(circle, #1a2721 0%, #151e19 100%);
+  border-color: #27382f;
+}
+
+[data-theme="dark"] .progress-bar-rail,
+[data-theme="dark"] .timeline-bar-rail {
+  background-color: #212f27;
+}
+
+[data-theme="dark"] .device-item {
+  background: #19241e;
+}
+
+/* --------------------------------------------------------------------------
+   Header Right Actions & Preferences Controls
+   -------------------------------------------------------------------------- */
+.header-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.icon-btn {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-card);
+  color: var(--text-main);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all var(--transition-fast);
+}
+
+.icon-btn:hover {
+  background: var(--bg-subtle-hover);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.icon-btn:focus-visible,
+.onboarding-card button:focus-visible {
+  outline: 3px solid var(--accent-blue);
+  outline-offset: 3px;
+}
+
+.icon-btn.is-active {
+  background: var(--primary-subtle);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* --------------------------------------------------------------------------
+   First-Use Onboarding Dialog
+   -------------------------------------------------------------------------- */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 18, 14, 0.72);
+  backdrop-filter: blur(5px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: fadeInOverlay 0.25s ease-out;
+}
+
+.onboarding-overlay[hidden] {
+  display: none !important;
+}
+
+.onboarding-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  max-width: 520px;
+  width: 100%;
+  padding: 2.25rem 2rem;
+  box-shadow: var(--shadow-elevated);
+  animation: slideUpCard 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.onboarding-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.onboarding-badge {
+  font-size: 2.25rem;
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  background: var(--primary-subtle);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+}
+
+.onboarding-title {
+  font-size: 1.5rem;
+  color: var(--text-main);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-subtitle {
+  font-size: 0.925rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.75rem;
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+}
+
+.step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.825rem;
+  flex-shrink: 0;
+}
+
+.step-body strong {
+  display: block;
+  font-size: 0.925rem;
+  color: var(--text-main);
+  margin-bottom: 0.2rem;
+}
+
+.step-body p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.onboarding-footer {
+  text-align: center;
+}
+
+.onboarding-footer .btn {
+  width: 100%;
+  justify-content: center;
+  padding: 0.85rem;
+  font-size: 1rem;
+}
+
+@keyframes fadeInOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUpCard {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Weekly Activity Timeline Card (7-Day Focus Rhythm)
+   -------------------------------------------------------------------------- */
+.timeline-card {
+  grid-column: 1 / -1;
+}
+
+.timeline-summary-badge {
+  font-size: 0.775rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  color: var(--primary);
+  border: 1px solid rgba(45, 106, 79, 0.2);
+}
+
+[data-theme="dark"] .timeline-summary-badge {
+  border-color: rgba(82, 183, 136, 0.3);
+}
+
+.timeline-chart-container {
+  margin: 1.25rem 0 1.5rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 1.5rem 1.25rem 1rem;
+}
+
+.timeline-bars {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.85rem;
+  align-items: flex-end;
+  height: 170px;
+}
+
+.timeline-bar-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.timeline-bar-val {
+  font-size: 0.725rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  min-height: 1rem;
+  white-space: nowrap;
+}
+
+.timeline-bar-rail {
+  width: 100%;
+  max-width: 42px;
+  height: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  position: relative;
+}
+
+.timeline-bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #52b788 0%, #2d6a4f 100%);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: height 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 0px;
+}
+
+.timeline-bar-column.is-today .timeline-bar-fill {
+  background: linear-gradient(180deg, #74c69d 0%, #2d6a4f 100%);
+  box-shadow: 0 0 10px rgba(82, 183, 136, 0.45);
+}
+
+.timeline-bar-day {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.25rem;
+}
+
+.timeline-bar-column.is-today .timeline-bar-day {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.timeline-bar-column.is-today .timeline-bar-rail {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary-subtle);
+}
+
+.timeline-footer {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border-light);
+}
+
+.timeline-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.timeline-stat-label {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.timeline-stat-val {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+@media (max-width: 560px) {
+  .timeline-bars {
+    gap: 0.4rem;
+  }
+
+  .timeline-bar-val {
+    font-size: 0.65rem;
+  }
+
+  .timeline-bar-day {
+    font-size: 0.68rem;
+  }
+
+  .timeline-footer {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .header-right-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}

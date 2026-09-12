@@ -9,6 +9,16 @@
     />
     <title>StudyCalm 🌿 | Mindful Pomodoro & Study Dashboard</title>
     <link rel="stylesheet" href="style.css" />
+    <script>
+      (function () {
+        try {
+          var p = JSON.parse(localStorage.getItem("studycalm-preferences-v1"));
+          if (p && p.theme === "dark") {
+            document.documentElement.setAttribute("data-theme", "dark");
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <!-- App Header & Navigation -->
@@ -36,6 +46,11 @@
               <a href="#goal" class="nav-link" data-tab="goal">Daily Goal</a>
             </li>
             <li>
+              <a href="#timeline" class="nav-link" data-tab="timeline"
+                >Weekly Rhythm</a
+              >
+            </li>
+            <li>
               <a href="#sync" class="nav-link" data-tab="sync">Devices</a>
             </li>
             <li>
@@ -44,12 +59,111 @@
           </ul>
         </nav>
 
-        <div class="user-status" aria-label="Current mindset">
-          <span class="status-indicator" aria-hidden="true"></span>
-          <span class="status-text">Ready for focus</span>
+        <div class="header-right-actions">
+          <div class="user-status" aria-label="Current mindset">
+            <span class="status-indicator" aria-hidden="true"></span>
+            <span class="status-text">Ready for focus</span>
+          </div>
+
+          <div
+            class="header-controls"
+            aria-label="Preferences and accessibility settings"
+          >
+            <button
+              type="button"
+              class="icon-btn"
+              id="soundToggleBtn"
+              aria-label="Toggle chime sound alerts (currently muted)"
+              title="Toggle chime sound alerts"
+            >
+              <span class="btn-icon" aria-hidden="true" id="soundIcon">🔇</span>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              id="notifToggleBtn"
+              aria-label="Toggle browser notifications (currently off)"
+              title="Toggle browser notifications"
+            >
+              <span class="btn-icon" aria-hidden="true" id="notifIcon">🔕</span>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              id="themeToggleBtn"
+              aria-label="Toggle dark mode theme"
+              title="Toggle dark mode theme"
+            >
+              <span class="btn-icon" aria-hidden="true" id="themeIcon">🌙</span>
+            </button>
+          </div>
         </div>
       </div>
     </header>
+
+    <!-- First-Use Onboarding Dialog -->
+    <div
+      class="onboarding-overlay"
+      id="onboardingModal"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="onboardingTitle"
+    >
+      <div class="onboarding-card">
+        <div class="onboarding-header">
+          <span class="onboarding-badge" aria-hidden="true">🌱</span>
+          <h2 id="onboardingTitle" class="onboarding-title">
+            Welcome to StudyCalm
+          </h2>
+          <p class="onboarding-subtitle">
+            A quiet, sustainable approach to deep work. Here are three
+            principles to guide your practice:
+          </p>
+        </div>
+        <div class="onboarding-steps">
+          <div class="onboarding-step">
+            <span class="step-num">1</span>
+            <div class="step-body">
+              <strong>Mindful Intervals</strong>
+              <p>
+                25 minutes of single-task dedication, followed by a restful
+                pause.
+              </p>
+            </div>
+          </div>
+          <div class="onboarding-step">
+            <span class="step-num">2</span>
+            <div class="step-body">
+              <strong>Gentle Daily Horizon</strong>
+              <p>
+                Aim for 120 minutes of focus per day — a balanced target
+                designed for sustainable cognitive stamina.
+              </p>
+            </div>
+          </div>
+          <div class="onboarding-step">
+            <span class="step-num">3</span>
+            <div class="step-body">
+              <strong>Showing Up Matters</strong>
+              <p>
+                Every moment of presence counts. Daily streaks celebrate
+                dedication without pressure or guilt.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="onboarding-footer">
+          <button
+            type="button"
+            class="btn btn-primary"
+            id="dismissOnboardingBtn"
+          >
+            <span>Begin Mindful Practice ✨</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Main Content Layout -->
     <main id="main-content" class="main-layout" role="main">
@@ -425,6 +539,60 @@
           </div>
         </section>
 
+        <!-- Weekly Activity Timeline Card -->
+        <section
+          id="timeline"
+          class="card timeline-card"
+          aria-labelledby="timeline-heading"
+        >
+          <div class="card-header">
+            <div>
+              <span class="card-eyebrow">Weekly Rhythm</span>
+              <h2 id="timeline-heading" class="card-title">7-Day Focus Flow</h2>
+            </div>
+            <span class="timeline-summary-badge" id="timelineSummaryBadge"
+              >0 mins this week</span
+            >
+          </div>
+
+          <p class="card-description">
+            Your daily focus distribution across the past 7 days, grounded in
+            sustainable stamina.
+          </p>
+
+          <div
+            class="timeline-chart-container"
+            aria-label="7-day focus minutes bar chart"
+            aria-live="polite"
+            role="region"
+          >
+            <div class="timeline-bars" id="timelineBars">
+              <!-- Dynamically rendered 7-day columns -->
+            </div>
+          </div>
+
+          <div class="timeline-footer">
+            <div class="timeline-stat">
+              <span class="timeline-stat-label">7-Day Total</span>
+              <strong class="timeline-stat-val" id="timelineWeekTotal"
+                >0 mins</strong
+              >
+            </div>
+            <div class="timeline-stat">
+              <span class="timeline-stat-label">Active Days</span>
+              <strong class="timeline-stat-val" id="timelineActiveDays"
+                >0 / 7 days</strong
+              >
+            </div>
+            <div class="timeline-stat">
+              <span class="timeline-stat-label">Daily Average</span>
+              <strong class="timeline-stat-val" id="timelineDailyAvg"
+                >0 mins/day</strong
+              >
+            </div>
+          </div>
+        </section>
+
         <!-- 3. Phone & Mac Upload / Sync Placeholders (Semantic & Non-misleading) -->
         <section
           id="sync"
@@ -562,9 +730,7 @@
           Saurav’s web workspace.
         </p>
         <div class="footer-right">
-          <span class="phase-tag"
-            >Phase 4: Tracking Integrity &amp; Achievements</span
-          >
+          <span class="phase-tag">Phase 5: Mindful Polish &amp; Themes</span>
           <a href="#main-content" class="back-to-top">Return to Top ↑</a>
         </div>
       </div>

@@ -14,21 +14,27 @@ Most productivity trackers induce anxiety with ticking clocks, harsh alerts, and
 
 ---
 
-## 🏗️ Phase 4 Scope (Tracking Integrity & Milestone Rewards)
+## 🏗️ Phase 5 Scope (Mindful Polish & Themes)
 
-This phase elevates StudyCalm into a reliable, mathematically consistent study companion with trustworthy tracking and mindful milestone achievements:
+This phase refines StudyCalm into an immersive, sensory-calm focus experience with respectful audio, native browser alerts, onboarding, weekly visual trends, and flexible aesthetics:
+
+- **Web Audio API Synthesizer Chime**: Gentle harmonic chime (528 Hz fundamental and 792 Hz resonant harmonic fifth) synthesized entirely in code without external audio assets or network downloads. Strictly opt-in with header toggle.
+- **Desktop Browser Notifications**: HTML5 `Notification` API integration notifying learners when focus blocks or restful pauses conclude. Strictly opt-in with explicit permission flow.
+- **First-Use Onboarding Dialog**: Non-intrusive modal introducing StudyCalm's three core principles (Mindful Intervals, Gentle Daily Horizon, Showing Up Matters). Dismisses gracefully and persists in preferences.
+- **Weekly Activity Timeline (7-Day Focus Flow)**: Dedicated responsive bar chart visualizing daily focus minutes across the past 7 days. Aggregated directly from the SSOT `sessionHistory` with real-time statistics (Week Total, Active Days, Daily Average).
+- **Manual Light & Dark Theme Toggle**: Deep charcoal and earthy pine night palette (`[data-theme="dark"]`) designed to reduce eye strain during evening study sessions, persisting across browser sessions.
+- **Independent Preferences Storage**: Separate `studycalm-preferences-v1` key isolating UI/sound preferences from core study session records.
+
+---
+
+## 🏗️ Phase 4 Scope (Tracking Integrity & Milestone Rewards)
 
 - **Single Source of Truth (SSOT)**: Daily focus time and total sessions are computed directly from valid, deduplicated records in `sessionHistory`, eliminating counter drift or inflated stats across reloads.
 - **Deterministic Streak Integrity Engine**: Streak is calculated directly from unique historical study calendar dates. Cannot duplicate or increment more than once per day.
-- **Anti-Duplicate & Anti-Tamper Protection**: Session IDs, timestamp signatures (<15s), and duration validations ensure clean history logging without ghost entries.
+- **Anti-Duplicate & Anti-Tamper Protection**: Session IDs, timestamp signatures (<45s), and duration validations ensure clean history logging without ghost entries.
 - **4-Stat Summary Overview Strip**: High-level responsive dashboard metrics displaying Today's Focus Time, Daily Progress %, Current Streak, and Total Sessions.
 - **Mindful Session Completed State**: Serene transition card offering mindful next actions (_Take a 5m Break_ or _Next Focus Block_) without abrupt timer snaps.
-- **Milestone Achievement System**: Non-gamified milestone badges:
-  - 🌱 **First Step**: First focus block completed
-  - 🎯 **Daily Horizon**: 120 minutes of focus achieved in a day
-  - 🌿 **3-Day Rhythm**: 3-day consecutive focus streak
-  - 🏆 **7-Day Rooted**: 7-day deep focus habit
-- **Backward-Compatible Storage**: Migrates existing v1 and v3 states to `studycalm-state-v4` automatically.
+- **Milestone Achievement System**: Non-gamified milestone badges (First Step, Daily Horizon, 3-Day Rhythm, 7-Day Rooted).
 
 ---
 
@@ -57,10 +63,9 @@ Then navigate to `http://localhost:8080` in your web browser.
 
 ---
 
-## 🗺️ Upcoming Roadmap (Phase 5+)
+## 🗺️ Upcoming Roadmap (Phase 6+)
 
-1. **Gentle Audio Alerts**: Tibetan singing bowl and soft chime cues on session completion.
-2. **Notification & Reminder System**: Browser desktop notifications for mindful study transitions.
-3. **Motivational Microcopy & Onboarding**: Gentle guided tour for new learners.
-4. **Timeline & Activity Visualizations**: Weekly trend charts and focus breakdown history.
-5. **Theme Customization**: Manual dark mode complementing system preferences.
+1. **Custom Focus Intervals & Soundscapes**: Ambient nature audio (gentle rain, forest stream, white noise) with Web Audio generators.
+2. **Subject Tagging & Intention Categorization**: Categorize study sessions by academic subject or project.
+3. **Export & Backup Tools**: JSON and CSV export/import for personal archival and data sovereignty.
+4. **Offline PWA Support**: Service worker caching and installable web app manifest.
