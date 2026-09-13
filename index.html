@@ -7,6 +7,10 @@
       name="description"
       content="StudyCalm — A gentle, achievement-focused study dashboard and Pomodoro companion."
     />
+    <meta name="theme-color" content="#2d6a4f" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon.svg" />
     <title>StudyCalm 🌿 | Mindful Pomodoro & Study Dashboard</title>
     <link rel="stylesheet" href="style.css" />
     <script>
@@ -41,6 +45,9 @@
             </li>
             <li>
               <a href="#timer" class="nav-link" data-tab="timer">Timer</a>
+            </li>
+            <li>
+              <a href="#tasks" class="nav-link" data-tab="tasks">Tasks</a>
             </li>
             <li>
               <a href="#goal" class="nav-link" data-tab="goal">Daily Goal</a>
@@ -90,6 +97,34 @@
             <button
               type="button"
               class="icon-btn"
+              id="focusModeBtn"
+              aria-label="Open distraction-free focus mode"
+              title="Open distraction-free focus mode"
+            >
+              <span class="btn-icon" aria-hidden="true">⛶</span>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              id="installAppBtn"
+              aria-label="Install StudyCalm"
+              title="Install StudyCalm on this device"
+              hidden
+            >
+              <span class="btn-icon" aria-hidden="true">⇩</span>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              id="settingsBtn"
+              aria-label="Open timer settings"
+              title="Open timer settings"
+            >
+              <span class="btn-icon" aria-hidden="true">⚙️</span>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
               id="themeToggleBtn"
               aria-label="Toggle dark mode theme"
               title="Toggle dark mode theme"
@@ -97,9 +132,67 @@
               <span class="btn-icon" aria-hidden="true" id="themeIcon">🌙</span>
             </button>
           </div>
+
+          <div class="focus-mode-overlay" id="focusModeOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="focusModeTitle">
+            <div class="focus-mode-shell">
+              <div class="focus-mode-topbar">
+                <span class="focus-mode-brand">🌱 StudyCalm</span>
+                <button type="button" class="icon-btn focus-mode-close" id="closeFocusModeBtn" aria-label="Exit focus mode" title="Exit focus mode">×</button>
+              </div>
+              <div class="focus-mode-content">
+                <span class="card-eyebrow" id="focusModeTitle">Distraction-free rhythm</span>
+                <span class="focus-mode-label" id="focusModeLabel">Focus Mode</span>
+                <div class="focus-mode-time" id="focusModeTime" aria-live="polite">25:00</div>
+                <p class="focus-mode-task" id="focusModeTask">Ready for your next focus block.</p>
+                <div class="focus-mode-actions">
+                  <button type="button" class="btn btn-primary" id="focusModeStartBtn">Start Session</button>
+                  <button type="button" class="btn btn-secondary" id="focusModeResetBtn">Reset</button>
+                </div>
+                <p class="focus-mode-hint">Press <kbd>Space</kbd> to start or pause · <kbd>Esc</kbd> to exit</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </header>
+
+    <div class="settings-overlay" id="settingsModal" hidden role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <section class="settings-card">
+        <div class="settings-header">
+          <div>
+            <span class="card-eyebrow">Personal Rhythm</span>
+            <h2 id="settingsTitle" class="card-title">Timer Settings</h2>
+          </div>
+          <button type="button" class="icon-btn" id="closeSettingsBtn" aria-label="Close timer settings">×</button>
+        </div>
+        <div class="settings-grid">
+          <label>Focus minutes<input id="settingsFocusMinutes" type="number" min="1" max="180" /></label>
+          <label>Short break<input id="settingsShortBreak" type="number" min="1" max="30" /></label>
+          <label>Long break<input id="settingsLongBreak" type="number" min="1" max="60" /></label>
+          <label>Pomodoros per cycle<input id="settingsCycleLength" type="number" min="1" max="8" /></label>
+        </div>
+        <div class="preset-section">
+          <span class="settings-label">Quick presets</span>
+          <div class="preset-list" role="group" aria-label="Timer presets">
+            <button type="button" class="preset-btn" data-preset="classic">
+              <strong>Classic</strong><span>25 · 5 · 15</span>
+            </button>
+            <button type="button" class="preset-btn" data-preset="deep">
+              <strong>Deep Work</strong><span>50 · 10 · 20</span>
+            </button>
+            <button type="button" class="preset-btn" data-preset="sprint">
+              <strong>Exam Sprint</strong><span>90 · 15 · 30</span>
+            </button>
+          </div>
+        </div>
+        <label class="settings-toggle"><input id="settingsAutoStart" type="checkbox" /> Automatically start the next interval</label>
+        <p class="settings-note">Your 120-minute daily horizon remains the minimum goal. You can always study beyond it.</p>
+        <div class="settings-actions">
+          <button type="button" class="btn btn-secondary" id="cancelSettingsBtn">Cancel</button>
+          <button type="button" class="btn btn-primary" id="saveSettingsBtn">Save settings</button>
+        </div>
+      </section>
+    </div>
 
     <!-- First-Use Onboarding Dialog -->
     <div
@@ -261,7 +354,10 @@
               <span class="card-eyebrow">Mindful Interval</span>
               <h2 id="timer-heading" class="card-title">Focus Rhythm</h2>
             </div>
-            <span class="mode-badge" id="currentModeLabel">Focus Mode</span>
+            <div class="timer-status">
+              <span class="mode-badge" id="currentModeLabel">Focus Mode</span>
+              <span class="pomodoro-count" id="pomodoroCount">Pomodoro 1 of 4</span>
+            </div>
           </div>
 
           <div
@@ -293,6 +389,28 @@
             >
               Restful Reset (15m)
             </button>
+          </div>
+
+          <div class="focus-duration-control">
+            <label for="focusDurationInput">Focus interval</label>
+            <div class="focus-duration-fields">
+              <input
+                type="number"
+                id="focusDurationInput"
+                min="1"
+                max="180"
+                step="1"
+                inputmode="numeric"
+                aria-describedby="focusDurationHint"
+              />
+              <span>minutes</span>
+              <button type="button" class="btn btn-secondary" id="applyFocusDurationBtn">
+                Apply
+              </button>
+            </div>
+            <span class="focus-duration-hint" id="focusDurationHint">
+              Choose 1–180 minutes. Your 120-minute daily goal stays available and you can go beyond it.
+            </span>
           </div>
 
           <div class="timer-display-container">
@@ -383,7 +501,7 @@
                 id="completedTakeBreakBtn"
               >
                 <span class="btn-icon" aria-hidden="true">☕</span>
-                <span>Take a 5m Pause</span>
+                <span>Take a Pause</span>
               </button>
               <button
                 type="button"
@@ -400,6 +518,32 @@
             🌱
             <em>Mindful Rhythm: Live countdown with local persistence.</em>
           </p>
+          <p class="keyboard-hint" aria-label="Keyboard shortcuts">
+            <span>Shortcuts</span>
+            <kbd>Space</kbd> start/pause
+            <kbd>R</kbd> reset
+            <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> switch modes
+          </p>
+        </section>
+
+        <section id="tasks" class="card task-card" aria-labelledby="tasks-heading">
+          <div class="card-header">
+            <div>
+              <span class="card-eyebrow">Today's Plan</span>
+              <h2 id="tasks-heading" class="card-title">Focus Tasks</h2>
+            </div>
+            <span class="task-count" id="taskCount">0 active</span>
+          </div>
+          <form class="task-form" id="taskForm">
+            <label class="sr-only" for="taskTitleInput">Task name</label>
+            <input id="taskTitleInput" type="text" maxlength="80" placeholder="What will you focus on?" required />
+            <label class="sr-only" for="taskEstimateInput">Estimated Pomodoros</label>
+            <input id="taskEstimateInput" type="number" min="1" max="20" value="1" aria-label="Estimated Pomodoros" />
+            <button type="submit" class="btn btn-primary">Add task</button>
+          </form>
+          <ul class="task-list" id="taskList" aria-live="polite">
+            <li class="task-empty">Add a task to give your next Pomodoro a clear intention.</li>
+          </ul>
         </section>
 
         <!-- 2. Daily 2-Hour Goal Placeholder (Accessible Progressbar & Demo State) -->
@@ -591,6 +735,37 @@
               >
             </div>
           </div>
+
+          <div class="focus-insights" aria-labelledby="insights-heading">
+            <div class="insights-heading-row">
+              <div>
+                <span class="card-eyebrow">Weekly Review</span>
+                <h3 id="insights-heading" class="insights-title">Focus Insights</h3>
+              </div>
+              <span class="insights-caption" id="insightsCaption">Based on the last 7 days</span>
+            </div>
+            <div class="insights-grid">
+              <div class="insight-stat">
+                <span class="insight-label">Focus blocks</span>
+                <strong id="insightsSessions">0</strong>
+              </div>
+              <div class="insight-stat">
+                <span class="insight-label">Average block</span>
+                <strong id="insightsAverage">0m</strong>
+              </div>
+              <div class="insight-stat">
+                <span class="insight-label">Best day</span>
+                <strong id="insightsBestDay">—</strong>
+              </div>
+              <div class="insight-stat">
+                <span class="insight-label">Consistency</span>
+                <strong id="insightsConsistency">0%</strong>
+              </div>
+            </div>
+            <p class="insights-message" id="insightsMessage">
+              Complete a focus block to start building your weekly rhythm.
+            </p>
+          </div>
         </section>
 
         <!-- 3. Planned Device Sync (Non-interactive roadmap) -->
@@ -765,6 +940,6 @@
       </div>
     </footer>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=22"></script>
   </body>
 </html>

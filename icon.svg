@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-labelledby="title">
+  <title>StudyCalm</title>
+  <rect width="192" height="192" rx="42" fill="#2d6a4f"/>
+  <path d="M95 146c-2-26-1-51 13-70 10-14 24-22 42-25-2 18-9 34-22 44-9 7-19 10-30 11-1 13-1 26 0 40H95Z" fill="#b7e4c7"/>
+  <path d="M94 147c2-26 0-48-11-62-9-11-21-17-37-19 1 16 8 29 19 38 8 6 17 8 27 9 1 11 1 22 1 34h1Z" fill="#74c69d"/>
+  <path d="M96 143c-1-36 5-60 26-79" fill="none" stroke="#f5f7f6" stroke-linecap="round" stroke-width="7"/>
+</svg>

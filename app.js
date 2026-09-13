@@ -45,6 +45,12 @@ function getLocalDateString(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function normalizePreferenceNumber(value, fallback, min, max) {
+  return Number.isFinite(value) && value >= min && value <= max
+    ? Math.round(value)
+    : fallback;
+}
+
 function getYesterdayDateString(today = new Date()) {
   const d = today instanceof Date ? new Date(today) : new Date(today);
   d.setDate(d.getDate() - 1);
@@ -65,6 +71,59 @@ function parseDuration(value) {
     return parts[0] * 60 + parts[1];
   }
   return 0;
+}
+
+function getFocusDurationMinutes() {
+  const value = Number(preferences?.focusDurationMinutes);
+  return Number.isFinite(value) && value >= 1 && value <= 180
+    ? Math.round(value)
+    : 25;
+}
+
+function getModeDuration(modeKey) {
+  if (modeKey === "focus") return getFocusDurationMinutes() * 60;
+  if (modeKey === "short-break") return preferences.shortBreakMinutes * 60;
+  return preferences.longBreakMinutes * 60;
+}
+
+function getPomodoroCycleState(sessionHistory) {
+  const completedFocusSessions = getTotalFocusSessions(sessionHistory);
+  const cycleLength = preferences.cycleLength || 4;
+  const completedInCycle = completedFocusSessions % cycleLength;
+
+  return {
+    completedFocusSessions,
+    currentNumber: completedInCycle + 1,
+    cycleLength,
+    nextBreakMode:
+      completedFocusSessions > 0 && completedInCycle === 0
+        ? "long-break"
+        : "short-break",
+  };
+}
+
+function normalizeTasks(tasks) {
+  if (!Array.isArray(tasks)) return [];
+  return tasks
+    .filter((task) => task && typeof task.title === "string")
+    .slice(0, 50)
+    .map((task) => ({
+      id: typeof task.id === "string" ? task.id : `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title: task.title.trim().slice(0, 80),
+      estimate: Math.min(20, Math.max(1, Number(task.estimate) || 1)),
+      completed: Math.max(0, Number(task.completed) || 0),
+      done: Boolean(task.done),
+    }))
+    .filter((task) => task.title);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function calculateProgress(completedMinutes, goalMinutes) {
@@ -280,6 +339,8 @@ function createDefaultState() {
     isRunning: false,
     targetEndTime: null,
     activeSessionId: null,
+    tasks: [],
+    activeTaskId: null,
     acknowledgedMilestones: {
       firstStep: false,
       dailyGoal: false,
@@ -336,6 +397,11 @@ function createDefaultPreferences() {
     soundEnabled: false,
     notificationsEnabled: false,
     onboardingDismissed: false,
+    focusDurationMinutes: 25,
+    shortBreakMinutes: 5,
+    longBreakMinutes: 15,
+    cycleLength: 4,
+    autoStartNext: false,
   };
 }
 
@@ -351,6 +417,16 @@ function loadPreferences() {
       soundEnabled: Boolean(parsed.soundEnabled),
       notificationsEnabled: Boolean(parsed.notificationsEnabled),
       onboardingDismissed: Boolean(parsed.onboardingDismissed),
+      focusDurationMinutes:
+        Number.isFinite(parsed.focusDurationMinutes) &&
+        parsed.focusDurationMinutes >= 1 &&
+        parsed.focusDurationMinutes <= 180
+          ? Math.round(parsed.focusDurationMinutes)
+          : 25,
+      shortBreakMinutes: normalizePreferenceNumber(parsed.shortBreakMinutes, 5, 1, 30),
+      longBreakMinutes: normalizePreferenceNumber(parsed.longBreakMinutes, 15, 1, 60),
+      cycleLength: normalizePreferenceNumber(parsed.cycleLength, 4, 1, 8),
+      autoStartNext: Boolean(parsed.autoStartNext),
     };
   } catch (e) {
     return createDefaultPreferences();
@@ -375,13 +451,57 @@ if (
     initNavigation();
     initModeSelector();
     initTimerControls();
+    initKeyboardShortcuts();
+    initFocusDurationControl();
+    initTaskControls();
     initSessionCompletedControls();
     initHeaderControls();
+    initFocusMode();
+    initProgressiveWebApp();
     initOnboarding();
     initDataTransferControls();
     render();
     console.log("🌿 StudyCalm SSOT state engine initialized successfully.");
   });
+}
+
+function initProgressiveWebApp() {
+  if (typeof window === "undefined") return;
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch((error) => {
+        console.warn("StudyCalm offline mode could not be enabled:", error);
+      });
+    }, { once: true });
+  }
+
+  const installButton = document.getElementById("installAppBtn");
+  if (!installButton) return;
+
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredPrompt = event;
+    installButton.hidden = false;
+  }, { once: true });
+
+  installButton.addEventListener("click", async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const choice = await deferredPrompt.userChoice;
+    if (choice.outcome === "accepted") {
+      showToast("StudyCalm was added to your device.");
+    }
+    deferredPrompt = null;
+    installButton.hidden = true;
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    installButton.hidden = true;
+    showToast("StudyCalm is ready whenever you are.");
+  }, { once: true });
 }
 
 function loadState() {
@@ -410,7 +530,7 @@ function loadState() {
     const selectedMode = MODE_CONFIG[parsed.selectedMode]
       ? parsed.selectedMode
       : "focus";
-    const modeDuration = MODE_CONFIG[selectedMode].duration;
+    const modeDuration = getModeDuration(selectedMode);
 
     const dedupedHistory = deduplicateHistory(parsed.sessionHistory);
 
@@ -436,6 +556,9 @@ function loadState() {
         typeof parsed.activeSessionId === "string"
           ? parsed.activeSessionId
           : null,
+      tasks: normalizeTasks(parsed.tasks),
+      activeTaskId:
+        typeof parsed.activeTaskId === "string" ? parsed.activeTaskId : null,
       acknowledgedMilestones,
       sessionHistory: dedupedHistory,
       lastUpdatedAt: Number.isFinite(parsed.lastUpdatedAt)
@@ -459,6 +582,8 @@ function saveState() {
         isRunning: state.isRunning,
         targetEndTime: state.targetEndTime,
         activeSessionId: state.activeSessionId,
+        tasks: state.tasks,
+        activeTaskId: state.activeTaskId,
         acknowledgedMilestones: state.acknowledgedMilestones,
         sessionHistory: state.sessionHistory,
         lastUpdatedAt: Date.now(),
@@ -481,6 +606,8 @@ function createExportPayload() {
       isRunning: state.isRunning,
       targetEndTime: state.targetEndTime,
       activeSessionId: state.activeSessionId,
+      tasks: state.tasks,
+      activeTaskId: state.activeTaskId,
       acknowledgedMilestones: state.acknowledgedMilestones,
       sessionHistory: state.sessionHistory,
       lastUpdatedAt: state.lastUpdatedAt,
@@ -490,23 +617,35 @@ function createExportPayload() {
       soundEnabled: preferences.soundEnabled,
       notificationsEnabled: preferences.notificationsEnabled,
       onboardingDismissed: preferences.onboardingDismissed,
+      focusDurationMinutes: preferences.focusDurationMinutes,
     },
   };
 }
 
+function validateBackupPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return false;
+  }
+
+  const importedState =
+    payload.state && typeof payload.state === "object" ? payload.state : payload;
+
+  return (
+    importedState &&
+    typeof importedState === "object" &&
+    Array.isArray(importedState.sessionHistory)
+  );
+}
+
 function normalizeImportedState(payload) {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("Backup must contain a JSON object.");
+  if (!validateBackupPayload(payload)) {
+    throw new Error("Backup must contain a JSON object with valid session history.");
   }
 
   const importedState =
     payload.state && typeof payload.state === "object"
       ? payload.state
       : payload;
-
-  if (!Array.isArray(importedState.sessionHistory)) {
-    throw new Error("Backup does not contain valid session history.");
-  }
 
   const selectedMode = MODE_CONFIG[importedState.selectedMode]
     ? importedState.selectedMode
@@ -520,10 +659,15 @@ function normalizeImportedState(payload) {
       Number.isFinite(importedState.remainingSeconds) &&
       importedState.remainingSeconds >= 0
         ? importedState.remainingSeconds
-        : MODE_CONFIG[selectedMode].duration,
+        : getModeDuration(selectedMode),
     isRunning: false,
     targetEndTime: null,
     activeSessionId: null,
+    tasks: normalizeTasks(importedState.tasks),
+    activeTaskId:
+      typeof importedState.activeTaskId === "string"
+        ? importedState.activeTaskId
+        : null,
     acknowledgedMilestones: {
       firstStep: Boolean(importedState.acknowledgedMilestones?.firstStep),
       dailyGoal: Boolean(importedState.acknowledgedMilestones?.dailyGoal),
@@ -548,6 +692,12 @@ function normalizeImportedPreferences(importedPreferences) {
     soundEnabled: Boolean(importedPreferences.soundEnabled),
     notificationsEnabled: Boolean(importedPreferences.notificationsEnabled),
     onboardingDismissed: Boolean(importedPreferences.onboardingDismissed),
+    focusDurationMinutes:
+      Number.isFinite(importedPreferences.focusDurationMinutes) &&
+      importedPreferences.focusDurationMinutes >= 1 &&
+      importedPreferences.focusDurationMinutes <= 180
+        ? Math.round(importedPreferences.focusDurationMinutes)
+        : 25,
   };
 }
 
@@ -572,10 +722,18 @@ function exportStudyData() {
 }
 
 async function importStudyData(file) {
-  if (!file) return;
+  if (!file || typeof file.text !== "function") {
+    showToast("That backup file is invalid or could not be read.");
+    return;
+  }
 
   try {
     const payload = JSON.parse(await file.text());
+
+    if (!validateBackupPayload(payload)) {
+      throw new Error("Backup is missing valid state data.");
+    }
+
     const importedState = normalizeImportedState(payload);
     const importedPreferences = normalizeImportedPreferences(
       payload.preferences,
@@ -684,7 +842,7 @@ function initModeSelector() {
       );
 
       state.selectedMode = modeKey;
-      state.remainingSeconds = MODE_CONFIG[state.selectedMode].duration;
+      state.remainingSeconds = getModeDuration(state.selectedMode);
       state.isRunning = false;
       state.targetEndTime = null;
       state.activeSessionId = null;
@@ -703,6 +861,157 @@ function initModeSelector() {
   });
 }
 
+function initFocusDurationControl() {
+  const input = document.getElementById("focusDurationInput");
+  const applyBtn = document.getElementById("applyFocusDurationBtn");
+  if (!input || !applyBtn || applyBtn.dataset.initialized === "true") return;
+
+  applyBtn.dataset.initialized = "true";
+  input.value = String(getFocusDurationMinutes());
+
+  applyBtn.addEventListener("click", () => {
+    const minutes = Number(input.value);
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 180) {
+      showToast("Choose a focus interval between 1 and 180 minutes.");
+      input.focus();
+      return;
+    }
+
+    preferences.focusDurationMinutes = Math.round(minutes);
+    savePreferences();
+
+    if (state.selectedMode === "focus" && !state.isRunning) {
+      state.remainingSeconds = getModeDuration("focus");
+      state.targetEndTime = null;
+      state.activeSessionId = null;
+      saveState();
+    }
+
+    render();
+    showToast(`Focus interval set to ${preferences.focusDurationMinutes} minutes.`);
+  });
+}
+
+function initTaskControls() {
+  const form = document.getElementById("taskForm");
+  const titleInput = document.getElementById("taskTitleInput");
+  const estimateInput = document.getElementById("taskEstimateInput");
+  if (!form || !titleInput || !estimateInput || form.dataset.initialized === "true") {
+    return;
+  }
+
+  form.dataset.initialized = "true";
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const title = titleInput.value.trim();
+    const estimate = Math.min(20, Math.max(1, Number(estimateInput.value) || 1));
+    if (!title) return;
+
+    const task = {
+      id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title: title.slice(0, 80),
+      estimate,
+      completed: 0,
+      done: false,
+    };
+    state.tasks.unshift(task);
+    if (!state.activeTaskId) state.activeTaskId = task.id;
+    saveState();
+    render();
+    titleInput.value = "";
+    estimateInput.value = "1";
+    titleInput.focus();
+    showToast(`Task added: ${task.title}`);
+  });
+
+  document.getElementById("taskList")?.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-task-action]");
+    if (!button) return;
+    const taskId = button.closest("[data-task-id]")?.dataset.taskId;
+    const task = state.tasks.find((item) => item.id === taskId);
+    if (!task) return;
+
+    if (button.dataset.taskAction === "move-up" || button.dataset.taskAction === "move-down") {
+      const index = state.tasks.findIndex((item) => item.id === task.id);
+      const offset = button.dataset.taskAction === "move-up" ? -1 : 1;
+      const targetIndex = index + offset;
+      if (targetIndex >= 0 && targetIndex < state.tasks.length) {
+        [state.tasks[index], state.tasks[targetIndex]] = [
+          state.tasks[targetIndex],
+          state.tasks[index],
+        ];
+        saveState();
+        render();
+      }
+    } else if (button.dataset.taskAction === "edit") {
+      const title = window.prompt("Update task name", task.title);
+      if (title === null) return;
+      const nextTitle = title.trim().slice(0, 80);
+      if (!nextTitle) {
+        showToast("Task name cannot be empty.");
+        return;
+      }
+      const estimate = window.prompt("Estimated Pomodoros (1–20)", String(task.estimate));
+      if (estimate === null) return;
+      const nextEstimate = Number(estimate);
+      if (!Number.isInteger(nextEstimate) || nextEstimate < 1 || nextEstimate > 20) {
+        showToast("Choose an estimate from 1 to 20 Pomodoros.");
+        return;
+      }
+      task.title = nextTitle;
+      task.estimate = Math.max(task.completed, nextEstimate);
+      task.done = task.completed >= task.estimate;
+      saveState();
+      render();
+    } else if (button.dataset.taskAction === "select") {
+      state.activeTaskId = task.id;
+      saveState();
+      render();
+      showToast(`Next Pomodoro: ${task.title}`);
+    } else if (button.dataset.taskAction === "complete") {
+      task.done = !task.done;
+      if (task.done && state.activeTaskId === task.id) state.activeTaskId = null;
+      saveState();
+      render();
+    } else if (button.dataset.taskAction === "delete") {
+      state.tasks = state.tasks.filter((item) => item.id !== task.id);
+      if (state.activeTaskId === task.id) state.activeTaskId = state.tasks[0]?.id || null;
+      saveState();
+      render();
+    }
+  });
+}
+
+function renderTasks() {
+  const list = document.getElementById("taskList");
+  const count = document.getElementById("taskCount");
+  if (!list) return;
+  const activeTasks = state.tasks.filter((task) => !task.done);
+  if (count) count.textContent = `${activeTasks.length} active`;
+
+  list.innerHTML = state.tasks.length
+    ? state.tasks.map((task) => {
+        const active = task.id === state.activeTaskId;
+        const progress = `${Math.min(task.completed, task.estimate)}/${task.estimate}`;
+        const safeTitle = escapeHtml(task.title);
+        const safeId = escapeHtml(task.id);
+        return `<li class="task-item ${task.done ? "is-done" : ""} ${active ? "is-active" : ""}" data-task-id="${safeId}">
+          <button type="button" class="task-select" data-task-action="select" ${task.done ? "disabled" : ""}>
+            <span class="task-check" aria-hidden="true">${task.done ? "✓" : active ? "●" : "○"}</span>
+            <span class="task-copy"><strong>${safeTitle}</strong><small>${progress} Pomodoros</small><span class="task-progress"><span style="width:${Math.min(100, Math.round((task.completed / task.estimate) * 100))}%"></span></span></span>
+          </button>
+          <div class="task-actions">
+            <button type="button" class="icon-btn" data-task-action="move-up" aria-label="Move ${safeTitle} up" ${state.tasks[0]?.id === task.id ? "disabled" : ""}>↑</button>
+            <button type="button" class="icon-btn" data-task-action="move-down" aria-label="Move ${safeTitle} down" ${state.tasks[state.tasks.length - 1]?.id === task.id ? "disabled" : ""}>↓</button>
+            <button type="button" class="icon-btn" data-task-action="edit" aria-label="Edit ${safeTitle}">✎</button>
+            <button type="button" class="icon-btn" data-task-action="complete" aria-label="${task.done ? "Reopen" : "Complete"} ${safeTitle}">${task.done ? "↶" : "✓"}</button>
+            <button type="button" class="icon-btn" data-task-action="delete" aria-label="Delete ${safeTitle}">×</button>
+          </div>
+        </li>`;
+      }).join("")
+    : '<li class="task-empty">Add a task to give your next Pomodoro a clear intention.</li>';
+}
+
 function initTimerControls() {
   const startBtn =
     document.getElementById("startTimerBtn") ||
@@ -719,6 +1028,7 @@ function initTimerControls() {
       } else {
         resumeTimer();
       }
+
     });
   }
 
@@ -730,6 +1040,128 @@ function initTimerControls() {
   }
 }
 
+function initKeyboardShortcuts() {
+  if (document.body.dataset.shortcutsInitialized === "true") return;
+  document.body.dataset.shortcutsInitialized = "true";
+
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      target?.isContentEditable
+    ) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    if (key === "escape" && document.getElementById("focusModeOverlay")?.hidden === false) {
+      closeFocusMode();
+      return;
+    }
+    if (key === " " || key === "spacebar") {
+      event.preventDefault();
+      document.getElementById("startTimerBtn")?.click();
+    } else if (key === "r") {
+      event.preventDefault();
+      document.getElementById("resetTimerBtn")?.click();
+    } else if (key === "1") {
+      selectMode("focus");
+    } else if (key === "2") {
+      selectMode("short-break");
+    } else if (key === "3") {
+      selectMode("long-break");
+    }
+
+  });
+}
+
+function initFocusMode() {
+  const openButton = document.getElementById("focusModeBtn");
+  const overlay = document.getElementById("focusModeOverlay");
+  const closeButton = document.getElementById("closeFocusModeBtn");
+  const startButton = document.getElementById("focusModeStartBtn");
+  const resetButton = document.getElementById("focusModeResetBtn");
+  const mainContent = document.getElementById("main-content");
+  const focusableSelector =
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  if (!openButton || !overlay || openButton.dataset.initialized === "true") return;
+
+  openButton.dataset.initialized = "true";
+  openButton.addEventListener("click", openFocusMode);
+  closeButton?.addEventListener("click", closeFocusMode);
+  startButton?.addEventListener("click", () => {
+    document.getElementById("startTimerBtn")?.click();
+    updateFocusMode();
+  });
+  resetButton?.addEventListener("click", () => {
+    document.getElementById("resetTimerBtn")?.click();
+    updateFocusMode();
+  });
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeFocusMode();
+  });
+  overlay.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [...overlay.querySelectorAll(focusableSelector)];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  overlay.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeFocusMode();
+    }
+  });
+
+}
+
+function openFocusMode() {
+  const overlay = document.getElementById("focusModeOverlay");
+  if (!overlay) return;
+  const mainContent = document.getElementById("main-content");
+  overlay.hidden = false;
+  document.body.classList.add("focus-mode-open");
+  if (mainContent) mainContent.setAttribute("inert", "");
+  updateFocusMode();
+  document.getElementById("focusModeStartBtn")?.focus();
+}
+
+function closeFocusMode() {
+  const overlay = document.getElementById("focusModeOverlay");
+  if (!overlay) return;
+  const mainContent = document.getElementById("main-content");
+  overlay.hidden = true;
+  document.body.classList.remove("focus-mode-open");
+  if (mainContent) mainContent.removeAttribute("inert");
+  document.getElementById("focusModeBtn")?.focus();
+}
+
+function updateFocusMode() {
+  const label = document.getElementById("focusModeLabel");
+  const time = document.getElementById("focusModeTime");
+  const task = document.getElementById("focusModeTask");
+  const startButton = document.getElementById("focusModeStartBtn");
+  if (label) label.textContent = MODE_CONFIG[state.selectedMode]?.label || "Focus Mode";
+  if (time) time.textContent = formatDuration(state.remainingSeconds);
+  if (task) {
+    const activeTask = state.tasks.find((item) => item.id === state.activeTaskId && !item.done);
+    task.textContent = activeTask?.title || "Ready for your next focus block.";
+  }
+  if (startButton) {
+    startButton.textContent = state.isRunning ? "Pause Session" : "Start Session";
+  }
+}
+
 function initSessionCompletedControls() {
   const breakBtn = document.getElementById("completedTakeBreakBtn");
   const nextFocusBtn = document.getElementById("completedNextFocusBtn");
@@ -737,7 +1169,7 @@ function initSessionCompletedControls() {
   if (breakBtn) {
     breakBtn.addEventListener("click", () => {
       hideSessionCompletedPanel();
-      selectMode("short-break");
+      selectMode(getPomodoroCycleState(state.sessionHistory).nextBreakMode);
       resumeTimer();
     });
   }
@@ -754,7 +1186,7 @@ function initSessionCompletedControls() {
 function selectMode(modeKey) {
   if (!MODE_CONFIG[modeKey]) return;
   state.selectedMode = modeKey;
-  state.remainingSeconds = MODE_CONFIG[modeKey].duration;
+  state.remainingSeconds = getModeDuration(modeKey);
   state.isRunning = false;
   state.targetEndTime = null;
   state.activeSessionId = null;
@@ -791,8 +1223,15 @@ function showSessionCompletedPanel(modeConfig) {
   if (subtext) {
     subtext.textContent =
       modeConfig.type === "focus"
-        ? `${Math.round(modeConfig.duration / 60)} minutes of mindful focus recorded to your daily horizon.`
+        ? `${Math.round(getModeDuration("focus") / 60)} minutes of mindful focus recorded to your daily horizon.`
         : "Rest and reset complete. Ready to return with fresh focus.";
+  }
+
+  const breakButton = document.getElementById("completedTakeBreakBtn");
+  if (breakButton && modeConfig.type === "focus") {
+    const nextBreakMode = getPomodoroCycleState(state.sessionHistory).nextBreakMode;
+    const nextBreak = MODE_CONFIG[nextBreakMode];
+    breakButton.innerHTML = `<span class="btn-icon" aria-hidden="true">${nextBreak.icon}</span><span>Take a ${Math.round(nextBreak.duration / 60)}m ${nextBreakMode === "long-break" ? "Reset" : "Pause"}</span>`;
   }
 
   panel.hidden = false;
@@ -816,7 +1255,7 @@ function resumeTimer() {
   hideSessionCompletedPanel();
 
   if (state.remainingSeconds <= 0) {
-    state.remainingSeconds = MODE_CONFIG[state.selectedMode].duration;
+    state.remainingSeconds = getModeDuration(state.selectedMode);
   }
 
   // Bind a unique idempotency ID for this session if not already set
@@ -859,7 +1298,7 @@ function startTicker() {
     } else {
       renderTimerDigits();
       tickCount++;
-      if (tickCount % 4 === 0) {
+      if (tickCount % (preferences.cycleLength || 4) === 0) {
         saveState();
       }
     }
@@ -894,7 +1333,7 @@ function resetCurrentTimer() {
   state.isRunning = false;
   state.targetEndTime = null;
   state.activeSessionId = null;
-  state.remainingSeconds = MODE_CONFIG[state.selectedMode].duration;
+  state.remainingSeconds = getModeDuration(state.selectedMode);
   state.lastUpdatedAt = Date.now();
 
   stopNotificationPulse();
@@ -921,7 +1360,8 @@ function completeFocusCycle(fromReload = false) {
 
     const currentMode = state.selectedMode;
     const modeConfig = MODE_CONFIG[currentMode];
-    const durationMinutes = Math.round(modeConfig.duration / 60);
+    const durationSeconds = getModeDuration(currentMode);
+    const durationMinutes = Math.round(durationSeconds / 60);
     const now = new Date();
     const today = getLocalDateString(now);
 
@@ -963,10 +1403,24 @@ function completeFocusCycle(fromReload = false) {
         0,
         30,
       );
+
+      if (modeConfig.type === "focus" && state.activeTaskId) {
+        const activeTask = state.tasks.find(
+          (task) => task.id === state.activeTaskId,
+        );
+        if (activeTask) {
+          activeTask.completed += 1;
+          if (activeTask.completed >= activeTask.estimate) {
+            activeTask.done = true;
+            state.activeTaskId =
+              state.tasks.find((task) => !task.done)?.id || null;
+          }
+        }
+      }
     }
 
     state.activeSessionId = null;
-    state.remainingSeconds = modeConfig.duration;
+    state.remainingSeconds = durationSeconds;
     state.lastUpdatedAt = Date.now();
 
     saveState();
@@ -1025,7 +1479,16 @@ function completeFocusCycle(fromReload = false) {
       }
 
       saveState();
-      showSessionCompletedPanel(modeConfig);
+      const nextMode =
+        modeConfig.type === "focus"
+          ? getPomodoroCycleState(state.sessionHistory).nextBreakMode
+          : "focus";
+      if (preferences.autoStartNext) {
+        selectMode(nextMode);
+        resumeTimer();
+      } else {
+        showSessionCompletedPanel(modeConfig);
+      }
 
       // Mindful audio chime & desktop notification
       playMindfulChime();
@@ -1077,12 +1540,13 @@ function renderTimerDigits() {
   if (timerDisplay) {
     timerDisplay.textContent = formatDuration(state.remainingSeconds);
   }
+  updateFocusMode();
 
   const ringProgress = document.querySelector(".ring-progress");
   if (ringProgress) {
     const circleRadius = 96;
     const circumference = 2 * Math.PI * circleRadius;
-    const totalDuration = MODE_CONFIG[state.selectedMode].duration;
+    const totalDuration = getModeDuration(state.selectedMode);
     const durationRatio = Math.max(0, state.remainingSeconds / totalDuration);
     const dashOffset = circumference * (1 - durationRatio);
     ringProgress.style.strokeDasharray = String(circumference);
@@ -1105,12 +1569,34 @@ function render() {
   // Timer Intention & Mode Labels
   const timerIntention = document.getElementById("timerIntention");
   if (timerIntention) {
-    timerIntention.textContent = `Focus: ${MODE_CONFIG[state.selectedMode].intention}`;
+    const activeTask = state.tasks.find((task) => task.id === state.activeTaskId);
+    timerIntention.textContent = activeTask
+      ? `Focus: ${activeTask.title}`
+      : `Focus: ${MODE_CONFIG[state.selectedMode].intention}`;
   }
 
   const currentModeLabel = document.getElementById("currentModeLabel");
   if (currentModeLabel) {
     currentModeLabel.textContent = MODE_CONFIG[state.selectedMode].label;
+  }
+
+  document.querySelectorAll(".mode-btn").forEach((button) => {
+    const modeKey = button.dataset.mode;
+    if (!MODE_CONFIG[modeKey]) return;
+    const minutes = Math.round(getModeDuration(modeKey) / 60);
+    const label =
+      modeKey === "focus"
+        ? `Deep Focus (${minutes}m)`
+        : modeKey === "short-break"
+          ? `Short Pause (${minutes}m)`
+          : `Restful Reset (${minutes}m)`;
+    button.textContent = label;
+  });
+
+  const pomodoroCount = document.getElementById("pomodoroCount");
+  if (pomodoroCount) {
+    const cycle = getPomodoroCycleState(state.sessionHistory);
+    pomodoroCount.textContent = `Pomodoro ${cycle.currentNumber} of ${cycle.cycleLength}`;
   }
 
   // Summary Metrics Strip
@@ -1189,7 +1675,10 @@ function render() {
 
   const progressBar = document.querySelector(".progress-bar-rail");
   if (progressBar) {
-    progressBar.setAttribute("aria-valuenow", String(todayMinutes));
+    progressBar.setAttribute(
+      "aria-valuenow",
+      String(Math.min(DAILY_GOAL_MINUTES, todayMinutes)),
+    );
     progressBar.setAttribute(
       "aria-valuetext",
       `${todayMinutes} of ${DAILY_GOAL_MINUTES} minutes completed (${progressPercent}% of daily goal)`,
@@ -1238,7 +1727,7 @@ function render() {
   if (startBtn) {
     const isPaused =
       !state.isRunning &&
-      state.remainingSeconds < MODE_CONFIG[state.selectedMode].duration;
+      state.remainingSeconds < getModeDuration(state.selectedMode);
     startBtn.innerHTML = state.isRunning
       ? '<span class="btn-icon" aria-hidden="true">❚❚</span><span>Pause Session</span>'
       : `<span class="btn-icon" aria-hidden="true">▶</span><span>${isPaused ? "Resume Session" : "Start Session"}</span>`;
@@ -1269,6 +1758,7 @@ function render() {
 
   // Milestone Badges Showcase
   renderMilestones(milestones);
+  renderTasks();
 
   // History List
   const historyCount = document.getElementById("historyCount");
@@ -1669,6 +2159,100 @@ function initHeaderControls() {
     themeBtn.addEventListener("click", toggleTheme);
   }
 
+  const settingsBtn = document.getElementById("settingsBtn");
+  const settingsModal = document.getElementById("settingsModal");
+  const mainContent = document.getElementById("main-content");
+  const focusableSelector =
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  let settingsReturnFocus = null;
+  const closeSettings = () => {
+    if (!settingsModal || settingsModal.hidden) return;
+    settingsModal.hidden = true;
+    if (mainContent) mainContent.removeAttribute("inert");
+    settingsReturnFocus?.focus();
+  };
+  const openSettings = () => {
+    if (!settingsModal) return;
+    settingsReturnFocus = document.activeElement;
+    document.getElementById("settingsFocusMinutes").value = preferences.focusDurationMinutes;
+    document.getElementById("settingsShortBreak").value = preferences.shortBreakMinutes;
+    document.getElementById("settingsLongBreak").value = preferences.longBreakMinutes;
+    document.getElementById("settingsCycleLength").value = preferences.cycleLength;
+    document.getElementById("settingsAutoStart").checked = preferences.autoStartNext;
+    settingsModal.hidden = false;
+    if (mainContent) mainContent.setAttribute("inert", "");
+    document.getElementById("settingsFocusMinutes").focus();
+  };
+  if (settingsBtn && settingsBtn.dataset.initialized !== "true") {
+    settingsBtn.dataset.initialized = "true";
+    settingsBtn.addEventListener("click", openSettings);
+    const presets = {
+      classic: [25, 5, 15, 4],
+      deep: [50, 10, 20, 4],
+      sprint: [90, 15, 30, 3],
+    };
+    document.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const values = presets[button.dataset.preset];
+        if (!values) return;
+        document.getElementById("settingsFocusMinutes").value = values[0];
+        document.getElementById("settingsShortBreak").value = values[1];
+        document.getElementById("settingsLongBreak").value = values[2];
+        document.getElementById("settingsCycleLength").value = values[3];
+        document.querySelectorAll("[data-preset]").forEach((item) => {
+          item.classList.toggle("is-selected", item === button);
+        });
+      });
+    });
+    document.getElementById("closeSettingsBtn")?.addEventListener("click", closeSettings);
+    document.getElementById("cancelSettingsBtn")?.addEventListener("click", closeSettings);
+    document.getElementById("saveSettingsBtn")?.addEventListener("click", () => {
+      preferences.focusDurationMinutes = normalizePreferenceNumber(
+        Number(document.getElementById("settingsFocusMinutes").value), 25, 1, 180,
+      );
+      preferences.shortBreakMinutes = normalizePreferenceNumber(
+        Number(document.getElementById("settingsShortBreak").value), 5, 1, 30,
+      );
+      preferences.longBreakMinutes = normalizePreferenceNumber(
+        Number(document.getElementById("settingsLongBreak").value), 15, 1, 60,
+      );
+      preferences.cycleLength = normalizePreferenceNumber(
+        Number(document.getElementById("settingsCycleLength").value), 4, 1, 8,
+      );
+      preferences.autoStartNext = document.getElementById("settingsAutoStart").checked;
+      savePreferences();
+      if (!state.isRunning) {
+        state.remainingSeconds = getModeDuration(state.selectedMode);
+        persistState();
+      }
+      render();
+      closeSettings();
+      showToast("Timer settings saved.");
+    });
+    settingsModal?.addEventListener("click", (event) => {
+      if (event.target === settingsModal) closeSettings();
+    });
+    settingsModal?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSettings();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...settingsModal.querySelectorAll(focusableSelector)];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+  }
+
   applyTheme(preferences.theme);
   updateSoundButtonUI();
   updateNotificationButtonUI();
@@ -1791,6 +2375,43 @@ function renderWeeklyTimeline(sessionHistory) {
     `.trim();
     })
     .join("");
+
+  renderFocusInsights({ days, activeDays }, sessionHistory);
+}
+
+function renderFocusInsights(weeklyData, sessionHistory) {
+  const weekDates = new Set(weeklyData.days.map((day) => day.dateStr));
+  const weekEntries = (Array.isArray(sessionHistory) ? sessionHistory : [])
+    .filter((entry) => entry.type === "focus" && weekDates.has(entry.date));
+  const sessions = weekEntries.length;
+  const average = sessions
+    ? Math.round(weekEntries.reduce((sum, entry) => sum + (Number(entry.duration) || 0), 0) / sessions)
+    : 0;
+  const bestDay = weeklyData.days.reduce(
+    (best, day) => (day.minutes > best.minutes ? day : best),
+    { dayLabel: "—", minutes: 0 },
+  );
+  const values = {
+    insightsSessions: String(sessions),
+    insightsAverage: `${average}m`,
+    insightsBestDay: bestDay.minutes ? `${bestDay.dayLabel} · ${bestDay.minutes}m` : "—",
+    insightsConsistency: `${Math.round((weeklyData.activeDays / 7) * 100)}%`,
+  };
+
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  });
+
+  const message = document.getElementById("insightsMessage");
+  if (message) {
+    message.textContent =
+      sessions === 0
+        ? "Complete a focus block to start building your weekly rhythm."
+        : weeklyData.activeDays >= 5
+          ? "Your rhythm is steady this week. Protect the habit with a calm finish."
+          : `${weeklyData.activeDays} active ${weeklyData.activeDays === 1 ? "day" : "days"} so far. A short focus block today keeps the rhythm moving.`;
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -1814,5 +2435,13 @@ if (typeof module !== "undefined" && module.exports) {
     deduplicateHistory,
     createDefaultState,
     createDefaultPreferences,
+    getFocusDurationMinutes,
+    getModeDuration,
+    createExportPayload,
+    validateBackupPayload,
+    normalizeImportedState,
+    normalizeImportedPreferences,
+    exportStudyData,
+    importStudyData,
   };
 }

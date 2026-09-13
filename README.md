@@ -61,6 +61,28 @@ python3 -m http.server 8080
 
 Then navigate to `http://localhost:8080` in your web browser.
 
+### Option 3: Vercel
+
+StudyCalm is a client-side static app, so it does not require a Node or
+Express server. Vercel can deploy the repository directly:
+
+1. Import the GitHub repository into Vercel.
+2. Leave the framework preset as **Other**.
+3. Leave the build command blank.
+4. Set the output directory to `.`.
+5. Deploy.
+
+The included `vercel.json` enables clean URLs while allowing Vercel to serve
+`index.html`, `app.js`, and `style.css` as static assets.
+
+### PWA and offline mode
+
+The app is installable when served over HTTPS (or from localhost). On a
+supported browser, use the install icon in the header or the browser's install
+menu. The service worker caches the application shell so the timer remains
+available offline. Study records continue to stay in the browser's local
+storage and are never uploaded by the app.
+
 ---
 
 ## 🗺️ Upcoming Roadmap (Phase 6+)
@@ -68,4 +90,5 @@ Then navigate to `http://localhost:8080` in your web browser.
 1. **Custom Focus Intervals & Soundscapes**: Ambient nature audio (gentle rain, forest stream, white noise) with Web Audio generators.
 2. **Subject Tagging & Intention Categorization**: Categorize study sessions by academic subject or project.
 3. **Export & Backup Tools**: JSON and CSV export/import for personal archival and data sovereignty.
-4. **Offline PWA Support**: Service worker caching and installable web app manifest.
+4. **Cloud sync (optional future feature)**: Any future sync should be opt-in,
+   encrypted, and separate from the current local-first workflow.
