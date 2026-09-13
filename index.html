@@ -54,6 +54,11 @@
               <a href="#sync" class="nav-link" data-tab="sync">Devices</a>
             </li>
             <li>
+              <a href="#feedback" class="nav-link" data-tab="feedback"
+                >Feedback</a
+              >
+            </li>
+            <li>
               <a href="#history" class="nav-link" data-tab="history">History</a>
             </li>
           </ul>
@@ -688,6 +693,70 @@
               third-party data selling.</span
             >
           </div>
+        </section>
+
+        <section
+          id="feedback"
+          class="card feedback-card"
+          aria-labelledby="feedback-heading"
+        >
+          <div class="card-header">
+            <div>
+              <span class="card-eyebrow">Product Listening</span>
+              <h2 id="feedback-heading" class="card-title">
+                How is StudyCalm feeling?
+              </h2>
+            </div>
+            <span class="privacy-badge">🔒 Stays on this device</span>
+          </div>
+
+          <p class="card-description">
+            Share a private note about the timer, alerts, or backup flow. Notes
+            are saved in this browser only — nothing is sent to a server.
+          </p>
+
+          <form id="feedbackForm" class="feedback-form">
+            <fieldset class="feedback-feeling">
+              <legend class="feedback-label">Overall feeling</legend>
+              <label class="feedback-option">
+                <input type="radio" name="feeling" value="calm" required />
+                Calm and clear
+              </label>
+              <label class="feedback-option">
+                <input type="radio" name="feeling" value="helpful" />
+                Helpful, with small friction
+              </label>
+              <label class="feedback-option">
+                <input type="radio" name="feeling" value="needs-work" />
+                Needs more work
+              </label>
+            </fieldset>
+
+            <label class="feedback-label" for="feedbackComment"
+              >Optional note</label
+            >
+            <textarea
+              id="feedbackComment"
+              name="comment"
+              rows="4"
+              maxlength="500"
+              placeholder="What helped, what felt noisy, or what you want next…"
+            ></textarea>
+            <p class="feedback-hint" id="feedbackStatus">0 notes saved locally</p>
+
+            <div class="feedback-actions">
+              <button type="submit" class="btn btn-primary" id="saveFeedbackBtn">
+                Save note
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="exportFeedbackBtn"
+              >
+                Download notes
+              </button>
+            </div>
+          </form>
         </section>
 
         <!-- 4. Session History -->

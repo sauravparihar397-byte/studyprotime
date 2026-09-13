@@ -1530,6 +1530,72 @@ ul {
   }
 }
 
+.feedback-card {
+  grid-column: 1 / -1;
+}
+
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.feedback-feeling {
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.feedback-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.feedback-option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text-main);
+  font-size: 0.95rem;
+}
+
+.feedback-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 6rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text-main);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 0.8rem 0.9rem;
+}
+
+.feedback-form textarea:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.feedback-hint {
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+}
+
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .timeline-summary-badge {
   font-size: 0.775rem;
   font-weight: 600;

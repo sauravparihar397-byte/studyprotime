@@ -4,6 +4,8 @@ const STORAGE_KEY = "studycalm-state-v4";
 const PREV_STORAGE_KEY_V3 = "studycalm-state-v3";
 const LEGACY_STORAGE_KEY = "studycalm-state-v1";
 const PREFERENCES_KEY = "studycalm-preferences-v1";
+const FEEDBACK_KEY = "studycalm-feedback-v1";
+const FEEDBACK_FEELINGS = ["calm", "helpful", "needs-work"];
 const DAILY_GOAL_MINUTES = 120;
 
 const MODE_CONFIG = {
@@ -379,6 +381,7 @@ if (
     initHeaderControls();
     initOnboarding();
     initDataTransferControls();
+    initFeedbackControls();
     render();
     console.log("🌿 StudyCalm SSOT state engine initialized successfully.");
   });
@@ -618,6 +621,139 @@ function initDataTransferControls() {
       input.value = "";
     });
   }
+}
+
+function loadFeedbackNotes() {
+  try {
+    const raw = safeStorage.getItem(FEEDBACK_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.notes)) return [];
+    return parsed.notes.filter(
+      (note) =>
+        note &&
+        typeof note.id === "string" &&
+        FEEDBACK_FEELINGS.includes(note.feeling),
+    );
+  } catch (error) {
+    console.warn("Unable to restore feedback notes", error);
+    return [];
+  }
+}
+
+function saveFeedbackNotes(notes) {
+  safeStorage.setItem(
+    FEEDBACK_KEY,
+    JSON.stringify({
+      app: "StudyCalm",
+      version: 1,
+      notes: notes.slice(0, 50),
+    }),
+  );
+}
+
+function createFeedbackEntry(feeling, comment) {
+  const normalizedFeeling = FEEDBACK_FEELINGS.includes(feeling)
+    ? feeling
+    : null;
+  const normalizedComment =
+    typeof comment === "string" ? comment.trim().slice(0, 500) : "";
+
+  if (!normalizedFeeling) {
+    throw new Error("Choose how StudyCalm is feeling before saving a note.");
+  }
+
+  return {
+    id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    createdAt: new Date().toISOString(),
+    feeling: normalizedFeeling,
+    comment: normalizedComment,
+  };
+}
+
+function updateFeedbackStatus() {
+  const status = document.getElementById("feedbackStatus");
+  if (!status) return;
+  const count = loadFeedbackNotes().length;
+  status.textContent = `${count} ${count === 1 ? "note" : "notes"} saved locally`;
+}
+
+function submitFeedback(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const feeling = formData.get("feeling");
+  const comment = formData.get("comment");
+
+  try {
+    const entry = createFeedbackEntry(feeling, comment);
+    const notes = [entry, ...loadFeedbackNotes()].slice(0, 50);
+    saveFeedbackNotes(notes);
+    form.reset();
+    updateFeedbackStatus();
+    showToast("Your private StudyCalm note was saved on this device.");
+  } catch (error) {
+    showToast(
+      error instanceof Error
+        ? error.message
+        : "That note could not be saved.",
+    );
+  }
+}
+
+function exportFeedbackNotes() {
+  const notes = loadFeedbackNotes();
+  if (notes.length === 0) {
+    showToast("No feedback notes to download yet.");
+    return;
+  }
+
+  try {
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            app: "StudyCalm",
+            type: "feedback-notes",
+            exportedAt: new Date().toISOString(),
+            notes,
+          },
+          null,
+          2,
+        ),
+      ],
+      { type: "application/json" },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `studycalm-feedback-${getLocalDateString()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast("Your private feedback notes were downloaded.");
+  } catch (error) {
+    console.warn("Unable to export feedback notes", error);
+    showToast("Feedback notes could not be downloaded in this browser.");
+  }
+}
+
+function initFeedbackControls() {
+  const form = document.getElementById("feedbackForm");
+  const exportBtn = document.getElementById("exportFeedbackBtn");
+
+  if (form && form.dataset.initialized !== "true") {
+    form.dataset.initialized = "true";
+    form.addEventListener("submit", submitFeedback);
+  }
+
+  if (exportBtn && exportBtn.dataset.initialized !== "true") {
+    exportBtn.dataset.initialized = "true";
+    exportBtn.addEventListener("click", exportFeedbackNotes);
+  }
+
+  updateFeedbackStatus();
 }
 
 function restoreState() {
@@ -1814,5 +1950,8 @@ if (typeof module !== "undefined" && module.exports) {
     deduplicateHistory,
     createDefaultState,
     createDefaultPreferences,
+    FEEDBACK_KEY,
+    FEEDBACK_FEELINGS,
+    createFeedbackEntry,
   };
 }
