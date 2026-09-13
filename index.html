@@ -39,29 +39,29 @@
         <nav class="main-nav" aria-label="Primary Navigation">
           <ul class="nav-list">
             <li>
-              <a href="#dashboard" class="nav-link active" data-tab="dashboard"
+              <a href="#dashboard" target="_blank" rel="noopener" class="nav-link active" data-tab="dashboard"
                 >Dashboard</a
               >
             </li>
             <li>
-              <a href="#timer" class="nav-link" data-tab="timer">Timer</a>
+              <a href="#timer" target="_blank" rel="noopener" class="nav-link" data-tab="timer">Timer</a>
             </li>
             <li>
-              <a href="#tasks" class="nav-link" data-tab="tasks">Tasks</a>
+              <a href="#tasks" target="_blank" rel="noopener" class="nav-link" data-tab="tasks">Tasks</a>
             </li>
             <li>
-              <a href="#goal" class="nav-link" data-tab="goal">Daily Goal</a>
+              <a href="#goal" target="_blank" rel="noopener" class="nav-link" data-tab="goal">Daily Goal</a>
             </li>
             <li>
-              <a href="#timeline" class="nav-link" data-tab="timeline"
+              <a href="#timeline" target="_blank" rel="noopener" class="nav-link" data-tab="timeline"
                 >Weekly Rhythm</a
               >
             </li>
             <li>
-              <a href="#sync" class="nav-link" data-tab="sync">Devices</a>
+              <a href="#sync" target="_blank" rel="noopener" class="nav-link" data-tab="sync">Devices</a>
             </li>
             <li>
-              <a href="#history" class="nav-link" data-tab="history">History</a>
+              <a href="#history" target="_blank" rel="noopener" class="nav-link" data-tab="history">History</a>
             </li>
           </ul>
         </nav>
@@ -166,6 +166,7 @@
           <button type="button" class="icon-btn" id="closeSettingsBtn" aria-label="Close timer settings">×</button>
         </div>
         <div class="settings-grid">
+          <label>Daily goal minutes<input id="settingsDailyGoal" type="number" min="1" max="1440" /></label>
           <label>Focus minutes<input id="settingsFocusMinutes" type="number" min="1" max="180" /></label>
           <label>Short break<input id="settingsShortBreak" type="number" min="1" max="30" /></label>
           <label>Long break<input id="settingsLongBreak" type="number" min="1" max="60" /></label>
@@ -186,11 +187,33 @@
           </div>
         </div>
         <label class="settings-toggle"><input id="settingsAutoStart" type="checkbox" /> Automatically start the next interval</label>
-        <p class="settings-note">Your 120-minute daily horizon remains the minimum goal. You can always study beyond it.</p>
+        <p class="settings-note">Choose the daily focus target that fits your schedule. You can always study beyond it.</p>
         <div class="settings-actions">
           <button type="button" class="btn btn-secondary" id="cancelSettingsBtn">Cancel</button>
           <button type="button" class="btn btn-primary" id="saveSettingsBtn">Save settings</button>
         </div>
+      </section>
+    </div>
+
+    <div class="settings-overlay" id="taskEditModal" hidden role="dialog" aria-modal="true" aria-labelledby="taskEditTitle">
+      <section class="settings-card task-edit-card">
+        <div class="settings-header">
+          <div>
+            <span class="card-eyebrow">Today's Plan</span>
+            <h2 id="taskEditTitle" class="card-title">Edit focus task</h2>
+          </div>
+          <button type="button" class="icon-btn" id="closeTaskEditBtn" aria-label="Close task editor">×</button>
+        </div>
+        <form id="taskEditForm">
+          <div class="settings-grid">
+            <label>Task name<input id="taskEditTitleInput" type="text" maxlength="80" required /></label>
+            <label>Estimated Pomodoros<input id="taskEditEstimateInput" type="number" min="1" max="20" required /></label>
+          </div>
+          <div class="settings-actions">
+            <button type="button" class="btn btn-secondary" id="cancelTaskEditBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save task</button>
+          </div>
+        </form>
       </section>
     </div>
 
@@ -230,7 +253,7 @@
             <div class="step-body">
               <strong>Gentle Daily Horizon</strong>
               <p>
-                Aim for 120 minutes of focus per day — a balanced target
+                Set a daily focus target that fits your schedule — a balanced target
                 designed for sustainable cognitive stamina.
               </p>
             </div>
@@ -309,7 +332,7 @@
               >0%</strong
             >
             <span class="summary-metric-sub" id="summaryProgressSub"
-              >120m Daily Horizon</span
+              >Daily Focus Horizon</span
             >
           </div>
         </div>
@@ -409,7 +432,7 @@
               </button>
             </div>
             <span class="focus-duration-hint" id="focusDurationHint">
-              Choose 1–180 minutes. Your 120-minute daily goal stays available and you can go beyond it.
+              Choose 1–180 minutes. Every full minute is tracked, even if you pause or reset before the block ends.
             </span>
           </div>
 
@@ -557,7 +580,7 @@
               <span class="card-eyebrow">Sustainable Pace</span>
               <h2 id="goal-heading" class="card-title">Daily Focus Horizon</h2>
             </div>
-            <span class="goal-pill">Target: 2 Hours (120m)</span>
+            <span class="goal-pill" id="dailyGoalPill">Target: 120 mins</span>
           </div>
 
           <div class="goal-stats-summary">
@@ -571,6 +594,26 @@
               <span class="stat-unit">mins goal</span>
             </div>
           </div>
+
+          <form class="daily-goal-control" id="dailyGoalForm">
+            <label for="dailyGoalInput">Set your daily target</label>
+            <div class="daily-goal-fields">
+              <input
+                type="number"
+                id="dailyGoalInput"
+                min="1"
+                max="1440"
+                step="1"
+                inputmode="numeric"
+                aria-describedby="dailyGoalHint"
+              />
+              <span>minutes</span>
+              <button type="submit" class="btn btn-secondary">Save target</button>
+            </div>
+            <span class="daily-goal-hint" id="dailyGoalHint">
+              Your target is saved on this device and can be changed anytime.
+            </span>
+          </form>
 
           <div class="progress-track-wrapper">
             <div
@@ -588,7 +631,7 @@
               <span class="marker" style="left: 25%">30m</span>
               <span class="marker" style="left: 50%">60m</span>
               <span class="marker" style="left: 75%">90m</span>
-              <span class="marker" style="left: 100%">120m</span>
+              <span class="marker" style="left: 100%">Goal</span>
             </div>
           </div>
 
@@ -647,7 +690,7 @@
                 <div class="milestone-text">
                   <strong class="milestone-title">Daily Horizon</strong>
                   <span class="milestone-status" id="milestoneGoalStatus"
-                    >120 mins</span
+                    >Daily target</span
                   >
                 </div>
               </div>
@@ -884,7 +927,7 @@
           <div class="demo-state-callout" role="note">
             <span class="live-pill">Live</span>
             <span
-              >Your focus history updates after each completed work block.</span
+              >Your focus history updates every minute while you study, even before a work block is complete.</span
             >
           </div>
 
@@ -940,6 +983,6 @@
       </div>
     </footer>
 
-    <script src="app.js?v=22"></script>
+    <script src="app.js?v=30"></script>
   </body>
 </html>

@@ -7,7 +7,7 @@ An achievement-focused, calm study companion designed to nurture deep work witho
 Most productivity trackers induce anxiety with ticking clocks, harsh alerts, and guilt-driven streaks. **StudyCalm** takes a supportive, human-centered approach:
 
 - **Positive Framing**: Celebrate every period of focused attention, whether 5 minutes or 25 minutes.
-- **Daily Horizon**: A gentle 2-hour daily focus goal designed around sustainable cognitive stamina.
+- **Daily Horizon**: A user-defined daily focus goal designed around sustainable cognitive stamina.
 - **Multi-Device Awareness**: Prepared for Mac and phone study log verification.
 - **Privacy-First Architecture**: Built for user privacy. Phase 2 operates locally without trackers; future phases will support secure personal authentication and encrypted private cloud storage without third-party ad networks or data selling.
 - **Calm Aesthetic**: Soothing earth tones and generous whitespace designed to lower cognitive load.
@@ -85,10 +85,9 @@ storage and are never uploaded by the app.
 
 ---
 
-## 🗺️ Upcoming Roadmap (Phase 6+)
+## 🗺️ Future Roadmap
 
-1. **Custom Focus Intervals & Soundscapes**: Ambient nature audio (gentle rain, forest stream, white noise) with Web Audio generators.
-2. **Subject Tagging & Intention Categorization**: Categorize study sessions by academic subject or project.
-3. **Export & Backup Tools**: JSON and CSV export/import for personal archival and data sovereignty.
-4. **Cloud sync (optional future feature)**: Any future sync should be opt-in,
+1. **Subject Tagging & Intention Categorization**: Categorize study sessions by academic subject or project.
+2. **CSV Reports**: Add spreadsheet-friendly exports alongside the existing JSON backup.
+3. **Cloud sync (optional future feature)**: Any future sync should be opt-in,
    encrypted, and separate from the current local-first workflow.

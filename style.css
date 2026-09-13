@@ -2616,6 +2616,50 @@ body {
   border-radius: var(--radius-md);
 }
 
+.daily-goal-control {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1rem 0;
+  padding: 0.75rem 0.85rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+}
+
+.daily-goal-control label {
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.daily-goal-fields {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#dailyGoalInput {
+  width: 5.25rem;
+  min-height: 40px;
+  padding: 0.5rem 0.65rem;
+  color: var(--text-main);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-card);
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.daily-goal-fields > span,
+.daily-goal-hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.daily-goal-hint {
+  font-size: 0.75rem;
+}
+
 .focus-duration-control label {
   color: var(--text-main);
   font-size: 0.8rem;

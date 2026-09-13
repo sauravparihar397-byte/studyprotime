@@ -80,6 +80,15 @@ function getFocusDurationMinutes() {
     : 25;
 }
 
+function getDailyGoalMinutes() {
+  return normalizePreferenceNumber(
+    Number(preferences?.dailyGoalMinutes),
+    DAILY_GOAL_MINUTES,
+    1,
+    1440,
+  );
+}
+
 function getModeDuration(modeKey) {
   if (modeKey === "focus") return getFocusDurationMinutes() * 60;
   if (modeKey === "short-break") return preferences.shortBreakMinutes * 60;
@@ -145,7 +154,9 @@ function getTodayFocusMinutes(sessionHistory, todayStr = getLocalDateString()) {
 
 function getTotalFocusSessions(sessionHistory) {
   if (!Array.isArray(sessionHistory)) return 0;
-  return sessionHistory.filter((s) => s.type === "focus").length;
+  return sessionHistory.filter(
+    (s) => s.type === "focus" && s.completed !== false,
+  ).length;
 }
 
 /**
@@ -214,7 +225,7 @@ function getMilestones(sessionHistory, todayStr = getLocalDateString()) {
 
   return {
     firstStep: totalSessions >= 1,
-    dailyGoal: todayMinutes >= DAILY_GOAL_MINUTES,
+    dailyGoal: todayMinutes >= getDailyGoalMinutes(),
     streak3: streak.count >= 3,
     streak7: streak.count >= 7,
     todayMinutes,
@@ -319,6 +330,7 @@ function deduplicateHistory(history) {
         time: time || "Earlier",
         date,
         type,
+        completed: entry.completed !== false,
         completedAt: completedAt || Date.now(),
       });
     }
@@ -339,6 +351,7 @@ function createDefaultState() {
     isRunning: false,
     targetEndTime: null,
     activeSessionId: null,
+    activeSessionElapsedSeconds: 0,
     tasks: [],
     activeTaskId: null,
     acknowledgedMilestones: {
@@ -398,6 +411,7 @@ function createDefaultPreferences() {
     notificationsEnabled: false,
     onboardingDismissed: false,
     focusDurationMinutes: 25,
+    dailyGoalMinutes: DAILY_GOAL_MINUTES,
     shortBreakMinutes: 5,
     longBreakMinutes: 15,
     cycleLength: 4,
@@ -423,6 +437,12 @@ function loadPreferences() {
         parsed.focusDurationMinutes <= 180
           ? Math.round(parsed.focusDurationMinutes)
           : 25,
+      dailyGoalMinutes: normalizePreferenceNumber(
+        parsed.dailyGoalMinutes,
+        DAILY_GOAL_MINUTES,
+        1,
+        1440,
+      ),
       shortBreakMinutes: normalizePreferenceNumber(parsed.shortBreakMinutes, 5, 1, 30),
       longBreakMinutes: normalizePreferenceNumber(parsed.longBreakMinutes, 15, 1, 60),
       cycleLength: normalizePreferenceNumber(parsed.cycleLength, 4, 1, 8),
@@ -453,6 +473,7 @@ if (
     initTimerControls();
     initKeyboardShortcuts();
     initFocusDurationControl();
+    initDailyGoalControl();
     initTaskControls();
     initSessionCompletedControls();
     initHeaderControls();
@@ -556,6 +577,11 @@ function loadState() {
         typeof parsed.activeSessionId === "string"
           ? parsed.activeSessionId
           : null,
+      activeSessionElapsedSeconds:
+        Number.isFinite(parsed.activeSessionElapsedSeconds) &&
+        parsed.activeSessionElapsedSeconds >= 0
+          ? Math.floor(parsed.activeSessionElapsedSeconds)
+          : 0,
       tasks: normalizeTasks(parsed.tasks),
       activeTaskId:
         typeof parsed.activeTaskId === "string" ? parsed.activeTaskId : null,
@@ -582,6 +608,7 @@ function saveState() {
         isRunning: state.isRunning,
         targetEndTime: state.targetEndTime,
         activeSessionId: state.activeSessionId,
+        activeSessionElapsedSeconds: state.activeSessionElapsedSeconds,
         tasks: state.tasks,
         activeTaskId: state.activeTaskId,
         acknowledgedMilestones: state.acknowledgedMilestones,
@@ -606,6 +633,7 @@ function createExportPayload() {
       isRunning: state.isRunning,
       targetEndTime: state.targetEndTime,
       activeSessionId: state.activeSessionId,
+      activeSessionElapsedSeconds: state.activeSessionElapsedSeconds,
       tasks: state.tasks,
       activeTaskId: state.activeTaskId,
       acknowledgedMilestones: state.acknowledgedMilestones,
@@ -618,6 +646,11 @@ function createExportPayload() {
       notificationsEnabled: preferences.notificationsEnabled,
       onboardingDismissed: preferences.onboardingDismissed,
       focusDurationMinutes: preferences.focusDurationMinutes,
+      dailyGoalMinutes: preferences.dailyGoalMinutes,
+      shortBreakMinutes: preferences.shortBreakMinutes,
+      longBreakMinutes: preferences.longBreakMinutes,
+      cycleLength: preferences.cycleLength,
+      autoStartNext: preferences.autoStartNext,
     },
   };
 }
@@ -663,6 +696,7 @@ function normalizeImportedState(payload) {
     isRunning: false,
     targetEndTime: null,
     activeSessionId: null,
+    activeSessionElapsedSeconds: 0,
     tasks: normalizeTasks(importedState.tasks),
     activeTaskId:
       typeof importedState.activeTaskId === "string"
@@ -698,6 +732,31 @@ function normalizeImportedPreferences(importedPreferences) {
       importedPreferences.focusDurationMinutes <= 180
         ? Math.round(importedPreferences.focusDurationMinutes)
         : 25,
+    dailyGoalMinutes: normalizePreferenceNumber(
+      importedPreferences.dailyGoalMinutes,
+      DAILY_GOAL_MINUTES,
+      1,
+      1440,
+    ),
+    shortBreakMinutes: normalizePreferenceNumber(
+      importedPreferences.shortBreakMinutes,
+      5,
+      1,
+      30,
+    ),
+    longBreakMinutes: normalizePreferenceNumber(
+      importedPreferences.longBreakMinutes,
+      15,
+      1,
+      60,
+    ),
+    cycleLength: normalizePreferenceNumber(
+      importedPreferences.cycleLength,
+      4,
+      1,
+      8,
+    ),
+    autoStartNext: Boolean(importedPreferences.autoStartNext),
   };
 }
 
@@ -892,6 +951,29 @@ function initFocusDurationControl() {
   });
 }
 
+function initDailyGoalControl() {
+  const form = document.getElementById("dailyGoalForm");
+  const input = document.getElementById("dailyGoalInput");
+  if (!form || !input || form.dataset.initialized === "true") return;
+
+  form.dataset.initialized = "true";
+  input.value = String(getDailyGoalMinutes());
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || value < 1 || value > 1440) {
+      showToast("Choose a daily target between 1 and 1,440 minutes.");
+      input.focus();
+      return;
+    }
+
+    preferences.dailyGoalMinutes = Math.round(value);
+    savePreferences();
+    render();
+    showToast(`Daily focus target set to ${preferences.dailyGoalMinutes} minutes.`);
+  });
+}
+
 function initTaskControls() {
   const form = document.getElementById("taskForm");
   const titleInput = document.getElementById("taskTitleInput");
@@ -901,6 +983,87 @@ function initTaskControls() {
   }
 
   form.dataset.initialized = "true";
+  const taskEditModal = document.getElementById("taskEditModal");
+  const taskEditForm = document.getElementById("taskEditForm");
+  const taskEditTitleInput = document.getElementById("taskEditTitleInput");
+  const taskEditEstimateInput = document.getElementById("taskEditEstimateInput");
+  const mainContent = document.getElementById("main-content");
+  const taskEditFocusableSelector =
+    'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  let taskEditReturnFocus = null;
+  let editingTaskId = null;
+
+  const closeTaskEditor = () => {
+    if (!taskEditModal) return;
+    taskEditModal.hidden = true;
+    if (mainContent) mainContent.removeAttribute("inert");
+    editingTaskId = null;
+    taskEditReturnFocus?.focus();
+  };
+
+  const openTaskEditor = (task) => {
+    if (!taskEditModal || !taskEditForm || !taskEditTitleInput || !taskEditEstimateInput) return;
+    taskEditReturnFocus = document.activeElement;
+    editingTaskId = task.id;
+    taskEditTitleInput.value = task.title;
+    taskEditEstimateInput.value = String(task.estimate);
+    taskEditModal.hidden = false;
+    if (mainContent) mainContent.setAttribute("inert", "");
+    taskEditTitleInput.focus();
+  };
+
+  document.getElementById("closeTaskEditBtn")?.addEventListener("click", closeTaskEditor);
+  document.getElementById("cancelTaskEditBtn")?.addEventListener("click", closeTaskEditor);
+  taskEditModal?.addEventListener("click", (event) => {
+    if (event.target === taskEditModal) closeTaskEditor();
+  });
+  taskEditModal?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeTaskEditor();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...taskEditModal.querySelectorAll(taskEditFocusableSelector)];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  taskEditForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const task = state.tasks.find((item) => item.id === editingTaskId);
+    if (!task) {
+      closeTaskEditor();
+      return;
+    }
+    const title = taskEditTitleInput.value.trim().slice(0, 80);
+    const estimate = Number(taskEditEstimateInput.value);
+    if (!title) {
+      showToast("Task name cannot be empty.");
+      taskEditTitleInput.focus();
+      return;
+    }
+    if (!Number.isInteger(estimate) || estimate < 1 || estimate > 20) {
+      showToast("Choose an estimate from 1 to 20 Pomodoros.");
+      taskEditEstimateInput.focus();
+      return;
+    }
+    task.title = title;
+    task.estimate = Math.max(task.completed, estimate);
+    task.done = task.completed >= task.estimate;
+    saveState();
+    closeTaskEditor();
+    render();
+    showToast("Task updated.");
+  });
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const title = titleInput.value.trim();
@@ -944,25 +1107,7 @@ function initTaskControls() {
         render();
       }
     } else if (button.dataset.taskAction === "edit") {
-      const title = window.prompt("Update task name", task.title);
-      if (title === null) return;
-      const nextTitle = title.trim().slice(0, 80);
-      if (!nextTitle) {
-        showToast("Task name cannot be empty.");
-        return;
-      }
-      const estimate = window.prompt("Estimated Pomodoros (1–20)", String(task.estimate));
-      if (estimate === null) return;
-      const nextEstimate = Number(estimate);
-      if (!Number.isInteger(nextEstimate) || nextEstimate < 1 || nextEstimate > 20) {
-        showToast("Choose an estimate from 1 to 20 Pomodoros.");
-        return;
-      }
-      task.title = nextTitle;
-      task.estimate = Math.max(task.completed, nextEstimate);
-      task.done = task.completed >= task.estimate;
-      saveState();
-      render();
+      openTaskEditor(task);
     } else if (button.dataset.taskAction === "select") {
       state.activeTaskId = task.id;
       saveState();
@@ -1185,11 +1330,13 @@ function initSessionCompletedControls() {
 
 function selectMode(modeKey) {
   if (!MODE_CONFIG[modeKey]) return;
+  recordFocusProgress();
   state.selectedMode = modeKey;
   state.remainingSeconds = getModeDuration(modeKey);
   state.isRunning = false;
   state.targetEndTime = null;
   state.activeSessionId = null;
+  state.activeSessionElapsedSeconds = 0;
 
   clearInterval(timerIntervalId);
   timerIntervalId = null;
@@ -1253,6 +1400,7 @@ function resumeTimer() {
   if (state.isRunning) return;
 
   hideSessionCompletedPanel();
+  recordFocusProgress();
 
   if (state.remainingSeconds <= 0) {
     state.remainingSeconds = getModeDuration(state.selectedMode);
@@ -1261,6 +1409,7 @@ function resumeTimer() {
   // Bind a unique idempotency ID for this session if not already set
   if (!state.activeSessionId) {
     state.activeSessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    state.activeSessionElapsedSeconds = 0;
   }
 
   state.isRunning = true;
@@ -1270,6 +1419,72 @@ function resumeTimer() {
   saveState();
   startTicker();
   render();
+}
+
+function getCurrentFocusElapsedSeconds() {
+  if (state.selectedMode !== "focus") return 0;
+
+  const configuredDuration = getModeDuration("focus");
+  const elapsedFromTimer =
+    state.isRunning && state.targetEndTime
+      ? configuredDuration -
+        Math.max(0, Math.ceil((state.targetEndTime - Date.now()) / 1000))
+      : configuredDuration - state.remainingSeconds;
+
+  return Math.max(
+    state.activeSessionElapsedSeconds || 0,
+    Math.min(configuredDuration, Math.max(0, elapsedFromTimer)),
+  );
+}
+
+function recordFocusProgress(finalize = false) {
+  if (state.selectedMode !== "focus" || !state.activeSessionId) return false;
+
+  const elapsedSeconds = getCurrentFocusElapsedSeconds();
+  state.activeSessionElapsedSeconds = elapsedSeconds;
+  const elapsedMinutes = finalize
+    ? Math.floor(getModeDuration("focus") / 60)
+    : Math.floor(elapsedSeconds / 60);
+
+  if (elapsedMinutes < 1) return false;
+
+  const now = new Date();
+  const today = getLocalDateString(now);
+  const timeDisplay = now.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const existingEntry = state.sessionHistory.find(
+    (entry) => entry.id === state.activeSessionId,
+  );
+
+  if (existingEntry) {
+    existingEntry.duration = Math.max(
+      Number(existingEntry.duration) || 0,
+      elapsedMinutes,
+    );
+    existingEntry.time = timeDisplay;
+    existingEntry.date = today;
+    if (finalize) {
+      existingEntry.completed = true;
+      existingEntry.completedAt = now.getTime();
+    }
+  } else {
+    state.sessionHistory.unshift({
+      id: state.activeSessionId,
+      mode: "focus",
+      title: MODE_CONFIG.focus.label,
+      duration: elapsedMinutes,
+      time: timeDisplay,
+      date: today,
+      completedAt: finalize ? now.getTime() : 0,
+      type: "focus",
+      completed: finalize,
+    });
+    state.sessionHistory = deduplicateHistory(state.sessionHistory).slice(0, 30);
+  }
+
+  return true;
 }
 
 function startTicker() {
@@ -1290,6 +1505,10 @@ function startTicker() {
 
     state.remainingSeconds = secondsLeft;
     state.lastUpdatedAt = now;
+    const previousElapsedMinutes = Math.floor(
+      (state.activeSessionElapsedSeconds || 0) / 60,
+    );
+    state.activeSessionElapsedSeconds = getCurrentFocusElapsedSeconds();
 
     if (secondsLeft <= 0) {
       clearInterval(timerIntervalId);
@@ -1297,6 +1516,15 @@ function startTicker() {
       completeFocusCycle(false);
     } else {
       renderTimerDigits();
+      if (
+        state.selectedMode === "focus" &&
+        Math.floor(state.activeSessionElapsedSeconds / 60) >
+          previousElapsedMinutes
+      ) {
+        recordFocusProgress();
+        saveState();
+        render();
+      }
       tickCount++;
       if (tickCount % (preferences.cycleLength || 4) === 0) {
         saveState();
@@ -1316,6 +1544,7 @@ function pauseTimer() {
     state.remainingSeconds = Math.max(0, Math.ceil(diffMs / 1000));
   }
 
+  recordFocusProgress();
   state.isRunning = false;
   state.targetEndTime = null;
   state.lastUpdatedAt = Date.now();
@@ -1330,9 +1559,11 @@ function resetCurrentTimer() {
   clearInterval(timerIntervalId);
   timerIntervalId = null;
 
+  recordFocusProgress();
   state.isRunning = false;
   state.targetEndTime = null;
   state.activeSessionId = null;
+  state.activeSessionElapsedSeconds = 0;
   state.remainingSeconds = getModeDuration(state.selectedMode);
   state.lastUpdatedAt = Date.now();
 
@@ -1371,6 +1602,14 @@ function completeFocusCycle(fromReload = false) {
     const sessionId =
       state.activeSessionId ||
       `sess_${now.getTime()}_${Math.random().toString(36).slice(2, 7)}`;
+    const hadTrackedEntry = state.sessionHistory.some(
+      (entry) => entry.id === sessionId,
+    );
+    if (modeConfig.type === "focus") {
+      state.activeSessionId = sessionId;
+      state.remainingSeconds = 0;
+      recordFocusProgress(true);
+    }
 
     const timeDisplay = now.toLocaleTimeString([], {
       hour: "numeric",
@@ -1396,6 +1635,7 @@ function completeFocusCycle(fromReload = false) {
         date: today,
         completedAt: now.getTime(),
         type: modeConfig.type,
+        completed: true,
       });
 
       // Keep recent 30 entries, strictly deduplicated
@@ -1404,22 +1644,24 @@ function completeFocusCycle(fromReload = false) {
         30,
       );
 
-      if (modeConfig.type === "focus" && state.activeTaskId) {
-        const activeTask = state.tasks.find(
-          (task) => task.id === state.activeTaskId,
-        );
-        if (activeTask) {
-          activeTask.completed += 1;
-          if (activeTask.completed >= activeTask.estimate) {
-            activeTask.done = true;
-            state.activeTaskId =
-              state.tasks.find((task) => !task.done)?.id || null;
-          }
+    }
+
+    if (modeConfig.type === "focus" && state.activeTaskId && !hadTrackedEntry) {
+      const activeTask = state.tasks.find(
+        (task) => task.id === state.activeTaskId,
+      );
+      if (activeTask) {
+        activeTask.completed += 1;
+        if (activeTask.completed >= activeTask.estimate) {
+          activeTask.done = true;
+          state.activeTaskId =
+            state.tasks.find((task) => !task.done)?.id || null;
         }
       }
     }
 
     state.activeSessionId = null;
+    state.activeSessionElapsedSeconds = 0;
     state.remainingSeconds = durationSeconds;
     state.lastUpdatedAt = Date.now();
 
@@ -1449,7 +1691,7 @@ function completeFocusCycle(fromReload = false) {
       ) {
         state.acknowledgedMilestones.dailyGoal = true;
         showToast(
-          "🎯 Achievement Unlocked: Daily Horizon Fulfilled (120 mins)!",
+          `🎯 Achievement Unlocked: Daily Horizon Fulfilled (${getDailyGoalMinutes()} mins)!`,
           "milestone",
         );
       }
@@ -1527,7 +1769,7 @@ function getEncouragementText(completedMinutes, goalMinutes) {
     return `🌟 <strong id="progressValue">${percent}%</strong> of your daily goal achieved! Outstanding mindful dedication today.`;
   }
   if (percent >= 50) {
-    return `✨ <strong id="progressValue">${percent}%</strong> complete! You're over halfway toward your 2-hour daily horizon.`;
+    return `✨ <strong id="progressValue">${percent}%</strong> complete! You're over halfway toward your daily focus target.`;
   }
   if (percent > 0) {
     return `🌱 <strong id="progressValue">${percent}%</strong> of your daily goal is complete. Keep your rhythm gentle and steady.`;
@@ -1564,7 +1806,8 @@ function render() {
   const totalFocusSessions = milestones.totalSessions;
   const streakCount = milestones.streakCount;
   const streakStatus = milestones.streakStatus;
-  const progressPercent = calculateProgress(todayMinutes, DAILY_GOAL_MINUTES);
+  const dailyGoalMinutes = getDailyGoalMinutes();
+  const progressPercent = calculateProgress(todayMinutes, dailyGoalMinutes);
 
   // Timer Intention & Mode Labels
   const timerIntention = document.getElementById("timerIntention");
@@ -1607,7 +1850,7 @@ function render() {
 
   const summaryTodayGoal = document.getElementById("summaryTodayGoal");
   if (summaryTodayGoal) {
-    summaryTodayGoal.textContent = `Goal: ${DAILY_GOAL_MINUTES} mins`;
+    summaryTodayGoal.textContent = `Goal: ${dailyGoalMinutes} mins`;
   }
 
   const summaryProgressPercent = document.getElementById(
@@ -1622,7 +1865,7 @@ function render() {
     summaryProgressSub.textContent =
       progressPercent >= 100
         ? "Daily Horizon Achieved"
-        : `${Math.max(0, DAILY_GOAL_MINUTES - todayMinutes)}m remaining`;
+        : `${Math.max(0, dailyGoalMinutes - todayMinutes)}m remaining`;
   }
 
   const summaryStreakCount = document.getElementById("summaryStreakCount");
@@ -1660,7 +1903,20 @@ function render() {
 
   const focusGoalValue = document.getElementById("focusGoalValue");
   if (focusGoalValue) {
-    focusGoalValue.textContent = String(DAILY_GOAL_MINUTES);
+    focusGoalValue.textContent = String(dailyGoalMinutes);
+  }
+
+  const dailyGoalPill = document.getElementById("dailyGoalPill");
+  if (dailyGoalPill) {
+    dailyGoalPill.textContent = `Target: ${dailyGoalMinutes} mins`;
+  }
+  const dailyGoalInput = document.getElementById("dailyGoalInput");
+  if (dailyGoalInput && document.activeElement !== dailyGoalInput) {
+    dailyGoalInput.value = String(dailyGoalMinutes);
+  }
+  const focusDurationInput = document.getElementById("focusDurationInput");
+  if (focusDurationInput && document.activeElement !== focusDurationInput) {
+    focusDurationInput.value = String(getFocusDurationMinutes());
   }
 
   const progressValue = document.getElementById("progressValue");
@@ -1675,13 +1931,14 @@ function render() {
 
   const progressBar = document.querySelector(".progress-bar-rail");
   if (progressBar) {
+    progressBar.setAttribute("aria-valuemax", String(dailyGoalMinutes));
     progressBar.setAttribute(
       "aria-valuenow",
-      String(Math.min(DAILY_GOAL_MINUTES, todayMinutes)),
+      String(Math.min(dailyGoalMinutes, todayMinutes)),
     );
     progressBar.setAttribute(
       "aria-valuetext",
-      `${todayMinutes} of ${DAILY_GOAL_MINUTES} minutes completed (${progressPercent}% of daily goal)`,
+      `${todayMinutes} of ${dailyGoalMinutes} minutes completed (${progressPercent}% of daily goal)`,
     );
   }
 
@@ -1689,7 +1946,7 @@ function render() {
   if (encouragementEl) {
     encouragementEl.innerHTML = getEncouragementText(
       todayMinutes,
-      DAILY_GOAL_MINUTES,
+      dailyGoalMinutes,
     );
   }
 
@@ -1835,7 +2092,7 @@ function renderMilestones(milestones) {
   if (mGoalStatus) {
     mGoalStatus.textContent = milestones.dailyGoal
       ? "Achieved 🎯"
-      : `${milestones.todayMinutes}/${DAILY_GOAL_MINUTES}m`;
+      : `${milestones.todayMinutes}/${getDailyGoalMinutes()}m`;
   }
 
   const mStreak3 = document.getElementById("milestoneStreak3");
@@ -2174,6 +2431,7 @@ function initHeaderControls() {
   const openSettings = () => {
     if (!settingsModal) return;
     settingsReturnFocus = document.activeElement;
+    document.getElementById("settingsDailyGoal").value = preferences.dailyGoalMinutes;
     document.getElementById("settingsFocusMinutes").value = preferences.focusDurationMinutes;
     document.getElementById("settingsShortBreak").value = preferences.shortBreakMinutes;
     document.getElementById("settingsLongBreak").value = preferences.longBreakMinutes;
@@ -2207,8 +2465,17 @@ function initHeaderControls() {
     document.getElementById("closeSettingsBtn")?.addEventListener("click", closeSettings);
     document.getElementById("cancelSettingsBtn")?.addEventListener("click", closeSettings);
     document.getElementById("saveSettingsBtn")?.addEventListener("click", () => {
+      preferences.dailyGoalMinutes = normalizePreferenceNumber(
+        Number(document.getElementById("settingsDailyGoal").value),
+        DAILY_GOAL_MINUTES,
+        1,
+        1440,
+      );
       preferences.focusDurationMinutes = normalizePreferenceNumber(
-        Number(document.getElementById("settingsFocusMinutes").value), 25, 1, 180,
+        Number(document.getElementById("settingsFocusMinutes").value),
+        25,
+        1,
+        180,
       );
       preferences.shortBreakMinutes = normalizePreferenceNumber(
         Number(document.getElementById("settingsShortBreak").value), 5, 1, 30,
@@ -2223,7 +2490,7 @@ function initHeaderControls() {
       savePreferences();
       if (!state.isRunning) {
         state.remainingSeconds = getModeDuration(state.selectedMode);
-        persistState();
+        saveState();
       }
       render();
       closeSettings();
@@ -2336,7 +2603,7 @@ function renderWeeklyTimeline(sessionHistory) {
   const { days, weekTotal, activeDays, dailyAvg } =
     getWeeklyTimelineData(sessionHistory);
 
-  const maxMinutes = Math.max(120, ...days.map((d) => d.minutes));
+  const maxMinutes = Math.max(getDailyGoalMinutes(), ...days.map((d) => d.minutes));
 
   // Update summary stats
   const badgeEl = document.getElementById("timelineSummaryBadge");
